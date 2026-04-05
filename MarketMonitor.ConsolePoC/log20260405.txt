@@ -1,0 +1,32 @@
+2026-04-05 09:45:56.376 +09:00 [INF] MarketMonitor PoC - データ取得テスト開始
+2026-04-05 09:45:56.983 +09:00 [INF] 為替レート: USD to JPY = 159.63263987
+2026-04-05 09:45:57.376 +09:00 [INF] 株価 (IBM): 最新終値 = 248.3000
+2026-04-05 09:45:57.376 +09:00 [INF] テスト完了
+2026-04-05 09:54:13.575 +09:00 [INF] MarketMonitor PoC - データ取得テスト開始
+2026-04-05 09:54:14.294 +09:00 [INF] 為替レート: USD to JPY = 159.63267252
+2026-04-05 09:54:14.707 +09:00 [INF] 株価 (IBM): 最新終値 = 248.3000 ドル
+2026-04-05 09:54:14.918 +09:00 [ERR] 株価の取得に失敗しました。
+2026-04-05 09:54:14.919 +09:00 [INF] テスト完了
+2026-04-05 09:56:46.738 +09:00 [INF] MarketMonitor PoC - データ取得テスト開始
+2026-04-05 09:56:47.455 +09:00 [INF] 為替レート: USD to JPY = 159.63296665
+2026-04-05 09:56:47.975 +09:00 [INF] 株価 (IBM): 最新終値 = 248.3000 ドル
+2026-04-05 09:56:48.271 +09:00 [ERR] 株価取得中にエラーが発生しました
+System.ArgumentOutOfRangeException: Index and length must refer to a location within the string. (Parameter 'length')
+   at System.String.ThrowSubstringArgumentOutOfRange(Int32 startIndex, Int32 length)
+   at System.String.Substring(Int32 startIndex, Int32 length)
+   at Program.GetStockPrice(String apiKey, String symbol) in C:\repos\market_monitor\MarketMonitor.ConsolePoC\Program.cs:line 93
+2026-04-05 09:56:48.324 +09:00 [INF] テスト完了
+2026-04-05 09:56:58.919 +09:00 [INF] MarketMonitor PoC - データ取得テスト開始
+2026-04-05 09:56:59.561 +09:00 [INF] 為替レート: USD to JPY = 159.63296665
+2026-04-05 09:57:00.058 +09:00 [INF] 株価 (IBM): 最新終値 = 248.3000 ドル
+2026-04-05 09:57:00.342 +09:00 [ERR] 株価の取得に失敗しました。レスポンス: {
+    "Information": "The **demo** API key is for demo purposes only. Please claim your free API key at (https://www.alphavantage.co/support/#api-key) to explore our full API offerings. It takes fewer than 20 seconds."
+}
+2026-04-05 09:57:00.343 +09:00 [INF] テスト完了
+2026-04-05 10:03:20.463 +09:00 [INF] MarketMonitor PoC - データ取得テスト開始
+2026-04-05 10:03:21.303 +09:00 [INF] 為替レート: USD to JPY = 159.63288786
+2026-04-05 10:03:21.752 +09:00 [INF] 株価 (IBM): 最新終値 = 248.3000 ドル
+2026-04-05 10:03:21.944 +09:00 [ERR] 株価 (9984.T)の取得に失敗しました。レスポンス: {
+    "Information": "The **demo** API key is for demo purposes only. Please claim your free API key at (https://www.alphavantage.co/support/#api-key) to explore our full API offerings. It takes fewer than 20 seconds."
+}
+2026-04-05 10:03:21.944 +09:00 [INF] テスト完了

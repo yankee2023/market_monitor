@@ -1,0 +1,5 @@
+<Solution>
+  <Project Path="MarketMonitor.csproj" />
+  <Project Path="../MarketMonitor.ConsolePoCTest/MarketMonitor.ConsolePoCTest.csproj" />
+  <Project Path="../MarketMonitor.ConsolePoC/MarketMonitor.ConsolePoC.csproj" />
+</Solution>
