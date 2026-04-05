@@ -32,9 +32,9 @@
 - [x] JSONデータのパース処理の実装
 
 ### Phase 2: GUIプロトタイプ (デスクトップ化)
-- [ ] WPFを用いたメインウィンドウの作成
-- [ ] ボタン押下による手動更新・タイマーによる自動更新の実装
-- [ ] グリッドやカード形式での現在値表示
+- [x] WPFを用いたメインウィンドウの作成
+- [x] ボタン押下による手動更新・タイマーによる自動更新の実装
+- [x] グリッドやカード形式での現在値表示
 
 ### Phase 3: データの蓄積と視覚化
 - [ ] SQLiteを用いたローカルDBの構築（日足データの保存）
@@ -58,6 +58,8 @@
 ## 📝 開発メモ
 * **命名規則:** クラス名やメソッド名はアッパーキャメルケース（PascalCase）を徹底。
 * **非同期処理:** API通信中にUIがフリーズしないよう `async/await` を適切に使用する。
+* **ログ出力:** WPF本線はSerilogで `logs/app-.log` に日次ローテーション出力する。
+* **テスト:** `MarketMonitorTest` で `MainViewModel` の単体テストを実装済み。
 * **参考:** 事実に基づく情報（株価等）と、ロジックによる推論（売買サイン等）を明確に区別して表示するUI設計を心がける。
 
 ---
@@ -66,5 +68,23 @@
 1.  Visual Studio 2026 で「WPF アプリケーション」プロジェクトを新規作成。
 2.  ソリューション名を `MarketMonitor` （またはお好みの名前）に設定。
 3.  `.NET デスクトップ開発` ワークロードがインストールされていることを確認。
+
+---
+
+## Copilot Instructions の配置方針
+- どの開き方でも有効化されるよう、instructionsを以下の2箇所に配置します。
+	- リポジトリルート: `.github/`
+	- ソリューション配下: `MarketMonitor/.github/`
+- 正本はリポジトリルートの `.github/` とします。
+- 同期は `tools/sync-copilot-instructions.ps1` を実行します。
+- 差分検知は `tools/check-copilot-instructions-sync.ps1` で実行できます（GitHub Actionsでも自動実行）。
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\sync-copilot-instructions.ps1
+```
+
+```powershell
+powershell -ExecutionPolicy Bypass -File .\tools\check-copilot-instructions-sync.ps1
+```
 
 ---

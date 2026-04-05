@@ -81,6 +81,42 @@ graph TD
 - ログはSerilogを使用し、ファイル出力を行う
 - フェーズごとに段階的に機能追加
 
+### 2.7 MVVM実装マッピング
+Phase2時点で、MVVMの責務は以下のように分割して実装している。
+
+| 区分 | 実装ファイル | 主な責務 |
+| --- | --- | --- |
+| View (V) | `MarketMonitor/MainWindow.xaml` | 画面レイアウト、入力欄、ボタン、表示ラベルの定義。バインディング先を宣言。 |
+| View (V) | `MarketMonitor/MainWindow.xaml.cs` | 画面ライフサイクル（Loaded/Closed）でViewModelを初期化・破棄。UIロジックは持たない。 |
+| ViewModel (VM) | `MarketMonitor/ViewModels/MainViewModel.cs` | 画面状態（Symbol、StatusMessage、表示値）を保持。更新処理と自動更新制御を実行。 |
+| Model (M) | `MarketMonitor/Models/MarketSnapshot.cs` | 取得データ（為替、株価、更新時刻）のデータ構造。 |
+| Model (M) | `MarketMonitor/Services/ApiService.cs` | 外部APIアクセスとレスポンス解析。銘柄入力正規化やフォールバック取得を提供。 |
+| Model (M) | `MarketMonitor/Services/IApiService.cs` | データ取得処理の抽象化（テスト容易性を確保）。 |
+| 補助基盤 | `MarketMonitor/Infrastructure/ObservableObject.cs` | INotifyPropertyChangedによる変更通知。 |
+| 補助基盤 | `MarketMonitor/Infrastructure/AsyncRelayCommand.cs` / `MarketMonitor/Infrastructure/RelayCommand.cs` | ボタン操作とViewModelメソッドの接続。 |
+
+#### 2.7.1 データバインディングの流れ
+```mermaid
+flowchart LR
+  V[View: MainWindow.xaml]
+  VM[ViewModel: MainViewModel]
+  M1[Model: MarketSnapshot]
+  M2[Service: ApiService]
+
+  V -- Binding --> VM
+  V -- Command --> VM
+  VM -- Call --> M2
+  M2 -- Return data --> M1
+  M1 --> VM
+  VM -- PropertyChanged --> V
+```
+
+#### 2.7.2 代表的な責務境界
+- Viewは「表示」と「入力イベントの受け口」のみを担当し、業務処理は実装しない。
+- ViewModelは「表示用状態」と「画面操作フロー」を担当し、HTTP通信そのものは直接行わない。
+- Model/Serviceは「データ取得・変換・保持」を担当し、UI要素（コントロール型）には依存しない。
+- これにより、ViewModel単体テストで画面ロジックを検証できる構成を維持する。
+
 ### 2.5.1 UML設計
 設計書にはUML図を含め、システム構成や主要な処理フローを視覚的に表現します。以下は設計書内に含める例です。
 
@@ -413,12 +449,14 @@ flowchart TD
 #### 3.9 主要コンポーネント
 - `MainWindow.xaml` / `MainWindow.xaml.cs`
 - `ViewModels/MainViewModel`
-- `Models/MarketDataModel`
-- `Services/ApiService`（Phase1の共通化）
+- `Models/MarketSnapshot`
+- `Services/ApiService`
+- `Infrastructure/AsyncRelayCommand`
+- `Infrastructure/RelayCommand`
 
 #### 3.10 入力/出力
 - 入力
-  - ユーザー操作（更新、銘柄選択）
+  - ユーザー操作（更新、銘柄名または銘柄コード入力）
 - 出力
   - UI上の現在値表示
   - ログファイルへの出力
@@ -427,6 +465,14 @@ flowchart TD
 - UIロジックはViewModelに集約
 - データバインディングを活用
 - コードビハインドは最小限に抑制
+
+#### 3.11.1 実装状況（2026-04-05）
+- 実装済み: メインウィンドウ、手動更新、自動更新切替、カード形式の現在値表示
+- 実装済み: `MainViewModel` による状態管理（Symbol、更新間隔、ステータスメッセージ）
+- 実装済み: `ApiService` による為替（USD/JPY）と株価（Symbol指定）の取得
+- 実装済み: 手動更新・自動更新開始/停止・更新成否のUI操作ログ出力（Serilog）
+- 実装済み: 日本株シンボル（`.T`）でAlpha Vantage取得失敗時はStooqへフォールバック
+- 補足: `ALPHA_VANTAGE_API_KEY` 未設定時は `demo` キーを使用
 
 ---
 
@@ -540,6 +586,7 @@ flowchart TD
 - コメントは日本語で記載し、テスト対象と期待値を明記。
 - 主要サービスのロジックはユニットテストでカバーする。
 - API呼び出しやJSONパースはモック化/分離可能に設計する。
+- Phase2では `MarketMonitorTest/MainViewModelTest.cs` を追加し、初期取得、更新間隔補正、自動更新切替、例外時表示を検証済み。
 
 ## 5. 今後の拡張方針
 - APIキー管理を設定ファイル/シークレット管理に移行

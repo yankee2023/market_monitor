@@ -1,24 +1,34 @@
-﻿using System.Text;
-using System.Windows;
-using System.Windows.Controls;
-using System.Windows.Data;
-using System.Windows.Documents;
-using System.Windows.Input;
-using System.Windows.Media;
-using System.Windows.Media.Imaging;
-using System.Windows.Navigation;
-using System.Windows.Shapes;
+﻿using System.Windows;
+using MarketMonitor.Services;
+using MarketMonitor.ViewModels;
 
 namespace MarketMonitor
 {
     /// <summary>
-    /// Interaction logic for MainWindow.xaml
+    /// メイン画面を表示するウィンドウ。
     /// </summary>
     public partial class MainWindow : Window
     {
+        private readonly MainViewModel _viewModel;
+
         public MainWindow()
         {
             InitializeComponent();
+            _viewModel = new MainViewModel(new ApiService(), new SerilogAppLogger());
+            DataContext = _viewModel;
+
+            Loaded += OnLoaded;
+            Closed += OnClosed;
+        }
+
+        private async void OnLoaded(object sender, RoutedEventArgs e)
+        {
+            await _viewModel.InitializeAsync();
+        }
+
+        private void OnClosed(object? sender, System.EventArgs e)
+        {
+            _viewModel.Dispose();
         }
     }
 }

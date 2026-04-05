@@ -1,0 +1,32 @@
+name: Verify Copilot Instructions Sync
+
+on:
+  pull_request:
+    paths:
+      - .github/copilot-instructions*.md
+      - MarketMonitor/.github/copilot-instructions*.md
+      - tools/check-copilot-instructions-sync.ps1
+      - tools/sync-copilot-instructions.ps1
+  push:
+    branches:
+      - main
+      - master
+    paths:
+      - .github/copilot-instructions*.md
+      - MarketMonitor/.github/copilot-instructions*.md
+      - tools/check-copilot-instructions-sync.ps1
+      - tools/sync-copilot-instructions.ps1
+  workflow_dispatch:
+
+jobs:
+  verify-sync:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Verify instruction sync
+        shell: pwsh
+        run: |
+          ./tools/check-copilot-instructions-sync.ps1
