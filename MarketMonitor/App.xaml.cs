@@ -1,4 +1,5 @@
 ﻿using System.Windows;
+using MarketMonitor.Composition;
 using Serilog;
 
 namespace MarketMonitor
@@ -6,20 +7,23 @@ namespace MarketMonitor
     /// <summary>
     /// アプリケーション全体の初期化を管理するクラス。
     /// </summary>
-    public partial class App : Application
+    public partial class App : Application, IDisposable
     {
+        private MainWindow? _mainWindow;
+
         /// <summary>
-        /// 起動時にロガーを初期化する。
+        /// 起動時にロガーとメインウィンドウを初期化する。
         /// </summary>
         protected override void OnStartup(StartupEventArgs e)
         {
-            Log.Logger = new LoggerConfiguration()
-                .MinimumLevel.Information()
-                .WriteTo.File("logs/app-.log", rollingInterval: RollingInterval.Day)
-                .CreateLogger();
+            AppLoggingConfigurator.Configure();
 
             Log.Information("MarketMonitor WPFを起動しました。");
+
             base.OnStartup(e);
+
+            _mainWindow = AppLifecycleService.Start(AppBootstrapper.CreateMainWindow);
+            MainWindow = _mainWindow;
         }
 
         /// <summary>
@@ -27,10 +31,20 @@ namespace MarketMonitor
         /// </summary>
         protected override void OnExit(ExitEventArgs e)
         {
+            Dispose();
             Log.Information("MarketMonitor WPFを終了します。");
             Log.CloseAndFlush();
             base.OnExit(e);
         }
-    }
 
+        /// <summary>
+        /// 保持中のリソースを破棄する。
+        /// </summary>
+        public void Dispose()
+        {
+            AppLifecycleService.Stop(_mainWindow);
+            _mainWindow = null;
+            GC.SuppressFinalize(this);
+        }
+    }
 }

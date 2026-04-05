@@ -1,595 +1,314 @@
 # MarketMonitor 設計書
 
-## 1. 概要
-MarketMonitorは、個人投資家向けのデスクトップ型マーケットモニタリングツールです。リアルタイムまたは定期的に為替レートや株価を取得し、表示・保存・通知することで、投資判断を支援します。
+## 1. 文書目的
+本書は、[SPECIFICATION.md](SPECIFICATION.md) に定義された日本株専用仕様を、実装可能な責務分割とコンポーネント設計へ変換した設計書である。
 
-本設計書では、最終成果物の全体設計（提供機能、入力、出力）、および各Phaseごとの詳細設計をまとめます。
+実装生成時は [templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md](templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md) を使用して、本書だけを入力にする。
+
+本書は次の条件を満たすことを目的とする。
+
+- 仕様書のみを入力としても、GitHub Copilot により同等の設計を再生成できること。
+- 本設計書のみを入力としても、GitHub Copilot により同等の実装を再生成できること。
+- 仕様書、設計書、実装の責務境界と命名が一致していること。
 
 ---
 
-## 2. 全体設計
+## 2. 設計方針
 
-### 2.1 提供機能
-- 為替レートの取得と監視
-  - USD/JPYを中心とした為替情報取得
-- 株価の取得と監視
-  - 米国株および日本株の取得
-- データのログ出力
-  - 実行ログ／エラーログをファイルへ出力
-- WPFによるGUI表示（フェーズ2以降）
-  - 現在値表示、更新ボタン、自動更新
-- ローカル保存と履歴管理（フェーズ3）
-  - SQLiteによる価格履歴保存
-- テクニカル指標の可視化（フェーズ4）
-  - 移動平均線、MACDなど
-- 通知機能（フェーズ4）
-  - 価格到達時のデスクトップ通知
+### 2.1 対象範囲
+- 東証プライム銘柄の入力解決
+- 日本株の現在値取得
+- 日本株のローソク足取得
+- 履歴保存と履歴表示
+- ステータス表示とログ出力
 
-### 2.2 入力
-- ユーザー入力
-  - 銘柄選択
-  - 更新トリガー（手動/自動）
-  - 通知設定
-- 外部API入力
-  - Alpha Vantage等のマーケットデータAPI
-- 設定値
-  - APIキー
-  - 更新間隔
-  - 監視対象シンボル
+### 2.2 対象外
+- 為替レートの取得・表示・保存
+- 米国株など東証以外の市場データ取得
+- 売買注文、通知、テクニカル指標の追加描画
 
-### 2.3 出力
-- 表示出力
-  - メイン画面に現在値、グラフ、ステータス
-- ログ出力
-  - INFOおよびERRORレベルのログファイル
-- 保存データ
-  - SQLiteに履歴データを保存
-- 通知出力
-  - Windowsデスクトップ通知
+### 2.3 アーキテクチャ原則
+- 機能ごとに縦割り Feature を設ける。
+- 複数機能で共有する責務のみ Shared 配下へ置く。
+- UI は Features/Dashboard/ViewModels/MainViewModel を唯一の画面統合入口とする。
+- Composition は依存関係の組み立てだけを担当する。
+- 旧構成の root-level Services、Models、Infrastructure、ViewModels は新構成移行完了後にビルド対象から除外する。
+- ViewModel から WPF 固有クラスを直接参照させず、必要な UI 依存は Shared/Infrastructure の抽象へ閉じ込める。
 
-### 2.4 システム構成
-- `MarketMonitor`（WPFアプリ、本線）
-  - UI層（Views）
-  - ViewModel層
-  - Model / Service層
-- `MarketMonitor.ConsolePoC`（コンソールPoC）
-  - 現在のデータ取得・ログ出力の検証用
-- `MarketMonitor.ConsolePoCTest`（テストプロジェクト）
-  - xUnitによるユニットテスト
+---
 
-### 2.5 ロギング設計
-- ログレベルは`INFO`と`ERROR`に限定。
-- ログ出力はファイルに保存し、日別ローテーションを想定。
-- `INFO`ログ: 正常取得、UI更新、データ保存などの主要操作。
-- `ERROR`ログ: APIエラー、JSON解析エラー、例外発生時のエラー。
-- ログには発生箇所、例外メッセージ、関連データ、APIレスポンスを含める。
-- ログ設計はPhase1でPoCとして実装し、Phase2以降も共通利用する。
+## 3. システム構成
 
-```mermaid
-graph TD
-    A[User/Process] --> B[Program / UI]
-    B --> C[ApiService]
-    C --> D[External API]
-    C --> E[Serilog]
-    B --> E
-```
-
-### 2.6 アーキテクチャ方針
-- MVVMパターンを採用
-- 依存性注入を想定
-- API呼び出しロジックはサービスクラスに集約
-- ログはSerilogを使用し、ファイル出力を行う
-- フェーズごとに段階的に機能追加
-
-### 2.7 MVVM実装マッピング
-Phase2時点で、MVVMの責務は以下のように分割して実装している。
-
-| 区分 | 実装ファイル | 主な責務 |
+### 3.1 フォルダ構成
+| 区分 | 配置 | 主責務 |
 | --- | --- | --- |
-| View (V) | `MarketMonitor/MainWindow.xaml` | 画面レイアウト、入力欄、ボタン、表示ラベルの定義。バインディング先を宣言。 |
-| View (V) | `MarketMonitor/MainWindow.xaml.cs` | 画面ライフサイクル（Loaded/Closed）でViewModelを初期化・破棄。UIロジックは持たない。 |
-| ViewModel (VM) | `MarketMonitor/ViewModels/MainViewModel.cs` | 画面状態（Symbol、StatusMessage、表示値）を保持。更新処理と自動更新制御を実行。 |
-| Model (M) | `MarketMonitor/Models/MarketSnapshot.cs` | 取得データ（為替、株価、更新時刻）のデータ構造。 |
-| Model (M) | `MarketMonitor/Services/ApiService.cs` | 外部APIアクセスとレスポンス解析。銘柄入力正規化やフォールバック取得を提供。 |
-| Model (M) | `MarketMonitor/Services/IApiService.cs` | データ取得処理の抽象化（テスト容易性を確保）。 |
-| 補助基盤 | `MarketMonitor/Infrastructure/ObservableObject.cs` | INotifyPropertyChangedによる変更通知。 |
-| 補助基盤 | `MarketMonitor/Infrastructure/AsyncRelayCommand.cs` / `MarketMonitor/Infrastructure/RelayCommand.cs` | ボタン操作とViewModelメソッドの接続。 |
+| Composition | Composition | 依存関係の組み立て、起動時初期化 |
+| Shared/Infrastructure | Shared/Infrastructure | ObservableObject、Command、UI タイマー抽象など UI 共通基盤 |
+| Shared/Logging | Shared/Logging | ログ抽象、Serilog 実装 |
+| Shared/MarketData | Shared/MarketData | HTTP、キャッシュ、銘柄解決、JPX 参照、共通エラーメッセージ |
+| Features/MarketSnapshot | Features/MarketSnapshot | 日本株現在値取得 |
+| Features/PriceHistory | Features/PriceHistory | 履歴保存、履歴読込 |
+| Features/JapaneseStockChart | Features/JapaneseStockChart | ローソク足取得、描画データ生成 |
+| Features/Dashboard | Features/Dashboard | 画面統合 ViewModel |
+| View | MainWindow.xaml | バインディング宣言と画面レイアウト |
 
-#### 2.7.1 データバインディングの流れ
+### 3.2 依存方向
+- View → Features/Dashboard
+- Features/Dashboard → Feature 入口インターフェース
+- Feature → Shared
+- Shared は Feature を参照しない
+- Composition のみ concrete 実装を new する
+
 ```mermaid
 flowchart LR
-  V[View: MainWindow.xaml]
-  VM[ViewModel: MainViewModel]
-  M1[Model: MarketSnapshot]
-  M2[Service: ApiService]
-
-  V -- Binding --> VM
-  V -- Command --> VM
-  VM -- Call --> M2
-  M2 -- Return data --> M1
-  M1 --> VM
-  VM -- PropertyChanged --> V
-```
-
-#### 2.7.2 代表的な責務境界
-- Viewは「表示」と「入力イベントの受け口」のみを担当し、業務処理は実装しない。
-- ViewModelは「表示用状態」と「画面操作フロー」を担当し、HTTP通信そのものは直接行わない。
-- Model/Serviceは「データ取得・変換・保持」を担当し、UI要素（コントロール型）には依存しない。
-- これにより、ViewModel単体テストで画面ロジックを検証できる構成を維持する。
-
-### 2.5.1 UML設計
-設計書にはUML図を含め、システム構成や主要な処理フローを視覚的に表現します。以下は設計書内に含める例です。
-
-- シーケンス図では同期メッセージと非同期メッセージを区別し、ログ出力を含めずに処理の流れを明確にする。
-- クラス図では関連線と依存線を明確に区別し、多重度を必ず記載する（多重度1は省略可）。
-- 図は必要最小限の要素に絞り、ラベルと線の見やすさを優先する。
-
-#### コンポーネント図
-```mermaid
-classDiagram
-    class Program
-    class ApiService
-    class HttpClient
-    class Serilog
-    class MarketMonitor_WPF
-    class StorageService
-    class NotificationService
-
-    Program --> ApiService : uses
-    ApiService --> HttpClient : calls
-    ApiService --> Serilog : logs
-    MarketMonitor_WPF --> ApiService : uses
-    MarketMonitor_WPF --> StorageService : persists data
-    MarketMonitor_WPF --> NotificationService : sends alerts
-```
-
-#### Phase別コンポーネント対応
-以下の表は、コンポーネント図のどの箇所を各Phaseで編集/追加するかを示します。これにより、Phase別の開発範囲が図のどの要素に対応するかが一目でわかります。
-
-| Phase | 対象コンポーネント | 対応する全体設計 |
-| --- | --- | --- |
-| Phase 1 | Program, ApiService, HttpClient, Serilog | 2.1 提供機能（為替/株価取得、ログ出力）、2.2 入力（APIキー/シンボル）、2.3 出力（ログファイル）、2.4 システム構成（Console PoC）、2.5 アーキテクチャ方針 |
-| Phase 2 | MarketMonitor_WPF, ApiService | 2.1 提供機能（UI表示、更新操作）、2.2 入力（ユーザー操作）、2.3 出力（UI表示）、2.4 システム構成（WPF本線）、2.5 アーキテクチャ方針 |
-| Phase 3 | StorageService, MarketMonitor_WPF | 2.1 提供機能（データ保存、可視化）、2.2 入力（取得データ/日付範囲）、2.3 出力（保存結果、チャート）、2.4 システム構成（ストレージ機能）、2.5 アーキテクチャ方針 |
-| Phase 4 | AnalyticsService, NotificationService, MarketMonitor_WPF | 2.1 提供機能（分析、通知）、2.2 入力（価格履歴、閾値）、2.3 出力（指標描画、通知）、2.4 システム構成（分析/通知サービス）、2.5 アーキテクチャ方針 |
-
-#### Phase対応図
-```mermaid
-graph LR
-    P1[Phase 1: Console PoC]
-    P2[Phase 2: WPF UI]
-    P3[Phase 3: Storage/Chart]
-    P4[Phase 4: Analytics/Notify]
-
-    Program --> P1
-    ApiService --> P1
-    MarketMonitor_WPF --> P2
-    ApiService --> P2
-    StorageService --> P3
-    MarketMonitor_WPF --> P3
-    AnalyticsService --> P4
-    NotificationService --> P4
-    MarketMonitor_WPF --> P4
-```
-
-#### シーケンス図
-```mermaid
-sequenceDiagram
-    participant User
-    participant Program
-    participant ApiService
-    participant AlphaVantage
-
-    User->>Program: start PoC
-    Program->>ApiService: GetExchangeRate()
-    ApiService->>AlphaVantage: request exchange rate
-    AlphaVantage-->>ApiService: response JSON
-    Program->>ApiService: GetStockPrice(symbol)
-    ApiService->>AlphaVantage: request stock price
-    AlphaVantage-->>ApiService: response JSON
-```
-
-#### クラス図
-```mermaid
-classDiagram
-    class ApiService {
-        - HttpClient _client
-        - string _apiKey
-        + Task GetExchangeRate()
-        + Task GetStockPrice(string symbol)
-    }
-    class Program {
-        + static Task Main(string[] args)
-    }
-    class MarketMonitor_WPF {
-        + void Initialize()
-    }
-    ApiService <|-- Program
-    MarketMonitor_WPF --|> ApiService
+    View[MainWindow.xaml] --> Dashboard[Features/Dashboard/MainViewModel]
+    Dashboard --> Snapshot[IMarketSnapshotService]
+    Dashboard --> History[IPriceHistoryFeatureService]
+    Dashboard --> Chart[IJapaneseStockChartFeatureService]
+    Snapshot --> Shared[Shared/MarketData]
+    Chart --> Shared
+    History --> Logging[Shared/Logging]
+    Composition[Composition/AppBootstrapper] --> Dashboard
+    Composition --> Snapshot
+    Composition --> History
+    Composition --> Chart
 ```
 
 ---
 
-## 3. Phase別詳細設計
+## 4. Feature 設計
 
-### Phase 1: データ取得の基盤構築（PoC）
-#### 3.1 目的
-- データ取得の実装を先行し、外部API連携とJSON処理の妥当性を確認する。
+### 4.1 FR-01 入力解決
+#### 4.1.1 責務
+- ユーザー入力を東証プライム銘柄の .T シンボルへ正規化する。
+- 別名入力を既知シンボルへ変換する。
+- JPX 一覧を用いた銘柄名解決を行う。
+- 東証プライム外の入力を利用者向けエラーへ変換する。
 
-#### 3.1.1 対象となる全体設計
-- 2.1 提供機能: 為替レート取得、株価取得、ログ出力
-- 2.2 入力: APIキー、銘柄シンボル
-- 2.3 出力: ログファイル
-- 2.4 システム構成: Console PoCプロジェクト
-- 2.5 アーキテクチャ方針: サービスクラス集約、例外処理、ログ出力
+#### 4.1.2 設計要素
+| 種別 | 実装 |
+| --- | --- |
+| 共通サービス | Shared/MarketData/MarketSymbolResolver |
+| 共通サービス | Shared/MarketData/TokyoPrimeSymbolResolver |
+| 共通抽象 | Shared/MarketData/ITokyoPrimeSymbolResolver |
+| 共通補助 | Shared/MarketData/ApiErrorMessages |
 
-#### 3.1.2 関連コンポーネント
-- Program: アプリ起動と全体制御
-- ApiService: API呼び出しとJSONパース
-- HttpClient: 外部API接続
-- Serilog: ログ出力
+#### 4.1.3 インターフェース契約
+- 入力: string symbol, CancellationToken
+- 出力: string normalizedSymbol
+- 例外: InvalidOperationException
 
-#### 3.1.3 Phase 1の可視化フロー
-```mermaid
-flowchart TD
-    U[ユーザー起動] --> P[Program]
-    P --> A[ApiService]
-    A --> H[HttpClient: API呼び出し]
-    A --> S[Serilog: ログ出力]
-    H --> R[レスポンス処理]
-    R --> O[コンソール出力]
-```
+#### 4.1.4 異常系契約
+- JPX 取得失敗時は解決失敗として扱う。
+- 解決結果が .T に到達しない場合は利用者向け入力エラーを返す。
 
-### Phase 2: WPF UIの実装
-#### 3.2 目的
-- WPFによるGUIを実装し、ユーザーがデータを視覚的に確認できるようにする。
+### 4.2 FR-02 現在値取得
+#### 4.2.1 責務
+- 日本株の現在値を取得する。
+- Yahoo Finance を主取得元とし、Stooq を最終フォールバックとする。
+- 株価キャッシュを利用する。
+- 現在値取得結果を MarketSnapshot として返す。
 
-#### 3.2.1 対象となる全体設計
-- 2.1 提供機能: WPF GUI表示、現在値表示、更新ボタン、自動更新
-- 2.2 入力: ユーザー操作（銘柄選択、更新トリガー）
-- 2.3 出力: UI表示
-- 2.4 システム構成: WPFアプリ本線
-- 2.5 アーキテクチャ方針: MVVMパターン、データバインディング
+#### 4.2.2 設計要素
+| 種別 | 実装 |
+| --- | --- |
+| Feature 入口 | Features/MarketSnapshot/Services/IMarketSnapshotService |
+| Feature 実装 | Features/MarketSnapshot/Services/MarketSnapshotService |
+| DTO | Features/MarketSnapshot/Models/MarketSnapshot |
+| 共通依存 | Shared/MarketData/RateLimitedHttpService |
+| 共通抽象 | Shared/MarketData/IRateLimitedHttpService |
+| 共通依存 | Shared/MarketData/MarketDataCache |
+| 共通依存 | Shared/MarketData/MarketSymbolResolver |
 
-#### 3.2.2 関連コンポーネント
-- MarketMonitor_WPF: メインアプリ
-- ApiService: データ取得
-- ViewModels: UIロジック
-- Views: XAML UI
+#### 4.2.3 DTO 契約
+| DTO | 項目 |
+| --- | --- |
+| MarketSnapshot | Symbol, CompanyName, StockPrice, StockUpdatedAt |
 
-#### 3.2.3 Phase 2の可視化フロー
-```mermaid
-flowchart TD
-    U[ユーザー操作] --> V[View: MainWindow]
-    V --> VM[ViewModel]
-    VM --> A[ApiService]
-    A --> D[データ取得]
-    D --> VM
-    VM --> V
-    V --> UI[UI更新]
-```
+#### 4.2.4 例外契約
+- Yahoo Finance 失敗時は Stooq へフォールバックする。
+- 最終的に取得不能な場合は InvalidOperationException を送出する。
 
-### Phase 3: データ保存と可視化
-#### 3.3 目的
-- 取得データをローカルに保存し、履歴チャートを表示する。
+### 4.3 FR-05, FR-06 履歴管理
+#### 4.3.1 責務
+- スナップショットを SQLite に保存する。
+- 直近履歴を読込んで内部処理へ渡す。
+- 旧スキーマから新スキーマへ移行する。
 
-#### 3.3.1 対象となる全体設計
-- 2.1 提供機能: SQLite保存、履歴管理、チャート表示
-- 2.2 入力: 日付範囲、取得データ
-- 2.3 出力: 保存結果、チャート
-- 2.4 システム構成: StorageService
-- 2.5 アーキテクチャ方針: リポジトリパターン
+#### 4.3.2 設計要素
+| 種別 | 実装 |
+| --- | --- |
+| Feature 入口 | Features/PriceHistory/Services/IPriceHistoryFeatureService |
+| Feature 実装 | Features/PriceHistory/Services/PriceHistoryFeatureService |
+| Repository | Features/PriceHistory/Services/IPriceHistoryRepository |
+| Repository 実装 | Features/PriceHistory/Services/SqlitePriceHistoryRepository |
+| DTO | Features/PriceHistory/Models/PriceHistoryEntry |
+| DTO | Features/PriceHistory/Models/PriceHistoryBar |
+| DTO | Features/PriceHistory/Models/PriceHistoryViewData |
+| 補助 | Features/PriceHistory/Services/PriceHistoryBarBuilder |
 
-#### 3.3.2 関連コンポーネント
-- StorageService: データ保存
-- MarketMonitor_WPF: UI拡張
-- SQLite: データベース
+#### 4.3.3 永続化契約
+- テーブル名: price_history
+- カラム: id, symbol, stock_price, recorded_at
+- 旧 schema に exchange_rate が含まれる場合は、新テーブルへコピー後に置換する。
 
-#### 3.3.3 Phase 3の可視化フロー
-```mermaid
-flowchart TD
-    U[ユーザー操作] --> V[View]
-    V --> VM[ViewModel]
-    VM --> A[ApiService: データ取得]
-    A --> S[StorageService: 保存]
-    S --> DB[SQLite]
-    VM --> C[Chart表示]
-    C --> V
-```
+### 4.4 FR-07, FR-08 日本株チャート
+#### 4.4.1 責務
+- 日本株ローソク足を取得する。
+- 足種別と表示期間を反映して表示用データを返す。
+- ローソク足描画用の正規化計算を行う。
+- 価格チャート上に重ねるチャート指標の定義と描画データを返す。
+- ローソク足領域の株価軸ラベルに必要な価格レンジを返す。
 
-### Phase 4: 分析と通知機能
-#### 3.4 目的
-- テクニカル指標を計算し、価格到達時に通知する。
+#### 4.4.2 設計要素
+| 種別 | 実装 |
+| --- | --- |
+| Feature 入口 | Features/JapaneseStockChart/Services/IJapaneseStockChartFeatureService |
+| Feature 実装 | Features/JapaneseStockChart/Services/JapaneseStockChartFeatureService |
+| 取得サービス | Features/JapaneseStockChart/Services/IJapaneseCandleService |
+| 取得実装 | Features/JapaneseStockChart/Services/JapaneseCandleService |
+| 描画実装 | Features/JapaneseStockChart/Services/CandlestickRenderService |
+| DTO | Features/JapaneseStockChart/Models/JapaneseCandleEntry |
+| DTO | Features/JapaneseStockChart/Models/CandlestickRenderItem |
+| DTO | Features/JapaneseStockChart/Models/ChartIndicatorPlacement |
+| DTO | Features/JapaneseStockChart/Models/ChartIndicatorDefinition |
+| DTO | Features/JapaneseStockChart/Models/ChartIndicatorRenderSeries |
+| DTO | Features/JapaneseStockChart/Models/CandlestickChartRenderData |
+| DTO | Features/JapaneseStockChart/Models/JapaneseStockChartViewData |
 
-#### 3.4.1 対象となる全体設計
-- 2.1 提供機能: テクニカル指標、通知
-- 2.2 入力: 価格履歴、通知設定
-- 2.3 出力: 指標描画、デスクトップ通知
-- 2.4 システム構成: AnalyticsService、NotificationService
-- 2.5 アーキテクチャ方針: イベント駆動
+#### 4.4.3 外部 IF 契約
+- Yahoo Finance: 現在値と同じ銘柄コードを使用する。
+- Stooq: .T を .jp へ変換して利用する。
 
-#### 3.4.2 関連コンポーネント
-- AnalyticsService: 指標計算
-- NotificationService: 通知送信
-- MarketMonitor_WPF: UI拡張
+### 4.5 FR-03, FR-04, FR-09 画面統合
+#### 4.5.1 責務
+- 手動更新と自動更新を制御する。
+- 現在値、履歴、ローソク足を一括更新する。
+- 画面表示用プロパティとコマンドを公開する。
+- ステータスメッセージと自動更新状態を管理する。
 
-#### 3.4.3 Phase 4の可視化フロー
-```mermaid
-flowchart TD
-    U[ユーザー設定] --> V[View]
-    V --> VM[ViewModel]
-    VM --> An[AnalyticsService: 指標計算]
-    An --> DB[履歴データ]
-    VM --> N[NotificationService: 条件チェック]
-    N --> NT[通知送信]
-    An --> C[Chart更新]
-    C --> V
-```
+#### 4.5.2 設計要素
+| 種別 | 実装 |
+| --- | --- |
+| ViewModel | Features/Dashboard/ViewModels/MainViewModel |
+| 共通基盤 | Shared/Infrastructure/ObservableObject |
+| 共通基盤 | Shared/Infrastructure/RelayCommand |
+| 共通基盤 | Shared/Infrastructure/AsyncRelayCommand |
+| 共通基盤 | Shared/Infrastructure/IUiDispatcherTimer, Shared/Infrastructure/WpfDispatcherTimerAdapter |
 
----
+#### 4.5.3 画面プロパティ契約
+- Symbol
+- AutoUpdateIntervalSeconds
+- AutoUpdateStateDisplay
+- CompanyDisplay
+- StockPriceDisplay
+- StockUpdatedAtDisplay
+- StatusMessage
+- PriceHistoryItems
+- JapaneseCandlesticks
+- JapaneseChartIndicatorOptions
+- VisibleJapaneseChartIndicators
+- JapaneseCandlestickYAxisTitle
+- JapaneseCandlestickXAxisTitle
+- JapaneseCandlestickMinPriceLabel
+- JapaneseCandlestickMidPriceLabel
+- JapaneseCandlestickMaxPriceLabel
+- HasVisibleJapaneseChartIndicators
+- JapaneseCandlestickCanvasWidth
+- 足種別と表示期間の選択状態プロパティ
 
-## 4. ログ設計
+### 4.6 FR-10 ログ出力
+#### 4.6.1 責務
+- ファイルログを日次ローテーションで出力する。
+- 機能横断ログを抽象化する。
 
-### 4.1 ログの目的
-- アプリケーションの動作状況を記録し、デバッグ、監視、トラブルシューティングを支援する。
-- ログはファイル出力とし、長期保存と分析を可能にする。
-
-### 4.2 ログレベル
-- **INFO**: 正常な操作の記録（データ取得成功、UI更新、データ保存）。
-- **ERROR**: エラーの記録（APIエラー、JSON解析失敗、例外発生）。
-- ログレベルは最低限に抑え、必要な情報のみを出力。
-
-### 4.3 ログ出力形式
-- 出力先: ファイル（日別ローテーション）。
-- フォーマット: タイムスタンプ、ログレベル、メッセージ、発生箇所。
-- 例: `[2023-10-01 12:00:00] INFO: Exchange rate retrieved successfully for USD/JPY.`
-
-### 4.4 ログの内容
-- **INFOログの内容**:
-  - データ取得結果（為替レート、株価）。
-  - UI操作（更新ボタン押下、自動更新実行）。
-  - データ保存完了。
-- **ERRORログの内容**:
-  - API呼び出し失敗（HTTPステータスコード、レスポンス内容）。
-  - JSON解析エラー（例外メッセージ、対象データ）。
-  - 予期せぬ例外（スタックトレース、関連データ）。
-
-### 4.5 ログの実装
-- 使用ライブラリ: Serilog。
-- 設定: appsettings.jsonまたはコード内で設定。
-- ログファイル: logs/app-{Date}.log。
-
-### 4.6 ログの可視化
-```mermaid
-graph TD
-    A[アプリケーション] --> B[Serilog Logger]
-    B --> C[ログファイル]
-    B --> D[コンソール（開発時）]
-    C --> E[ログ分析ツール]
-```
-
-### 4.7 ログのセキュリティとプライバシー
-- ログにAPIキーや個人情報を含めない。
-- ログファイルは適切に保護し、必要に応じて暗号化。
-    A --> H[HttpClient]
-    H --> X[AlphaVantage API]
-    X --> H
-    H --> A
-    A --> P
-    A --> S[Serilog]
-```
-
-#### 3.2 対象機能
-- 為替レート取得
-- 株価取得
-- ログ出力（INFO/ERROR）
-
-#### 3.3 主要コンポーネント
-- `ApiService`
-  - `GetExchangeRate()`
-  - `GetStockPrice(symbol)`
-- `Program`
-  - `Main()`
-  - `HttpClient`初期化
-  - `Serilog`設定
-
-#### 3.4 入力/出力
-- 入力
-  - `ALPHA_VANTAGE_API_KEY` 環境変数または `demo`
-  - 銘柄シンボル（例: `IBM`, `9984.T`）
-- 出力
-  - `log.txt` / 日付ローリングファイル
-  - `INFO`：取得成功、`ERROR`：取得失敗、例外情報
-
-#### 3.5 設計方針
-- API応答中のnull値を考慮し、デフォルト値を設定
-- 日本株判定はシンボル末尾の `.T` で判定
-- 例外時はスタックトレースとレスポンスをログに出力
-- テストは別プロジェクトで実装し、クラス単位のテスト名を付与
-
-#### 3.6 進捗
-- `MarketMonitor.ConsolePoC` プロジェクトでPhase1は実装済
-- `MarketMonitor.ConsolePoCTest` に単体テストを追加済
+#### 4.6.2 設計要素
+| 種別 | 実装 |
+| --- | --- |
+| Composition | Composition/AppLoggingConfigurator |
+| 抽象 | Shared/Logging/IAppLogger |
+| 実装 | Shared/Logging/SerilogAppLogger |
 
 ---
 
-### Phase 2: GUIプロトタイプ（デスクトップ化）
-#### 3.7 目的
-- WPFで基本的なUIを構築し、ユーザー操作によるデータ取得を実現する。
+## 5. 画面設計
 
-#### 3.7.1 対象となる全体設計
-- 2.1 提供機能: UIによる現在値表示と自動/手動更新
-- 2.2 入力: ユーザー操作、銘柄選択
-- 2.3 出力: UI表示、ログファイル
-- 2.4 システム構成: WPF本線プロジェクト
-- 2.5 アーキテクチャ方針: MVVM、データバインディング、ViewModel分離
+### 5.1 MainWindow
+- 上段: タイトル、説明文
+- 条件入力領域: 銘柄入力、自動更新秒数、更新ボタン、自動更新切替ボタン
+- 左ペイン: チャート、縦軸株価ラベル、間引きした横軸日付ラベル、日足/週足、表示期間切替、チャート指標表示切替
+- 右ペイン: 銘柄名、株価、更新時刻。GridSplitter により幅を調整可能
+- 下段: ステータス
 
-#### 3.7.2 関連コンポーネント
-- MarketMonitor_WPF: メイン画面とViewModel連携
-- ApiService: データ取得ロジックの共通化
-
-#### 3.7.3 Phase 2の可視化フロー
-```mermaid
-flowchart TD
-    U[ユーザー]
-    U --> W[MarketMonitor_WPF]
-    W --> V[MainViewModel]
-    V --> A[ApiService]
-    A --> H[HttpClient]
-    H --> X[AlphaVantage API]
-    V --> W
-```
-
-#### 3.8 対象機能
-- メインウィンドウの表示
-- 手動更新ボタン
-- タイマーによる自動更新
-- 為替/株価の現在値表示
-
-#### 3.9 主要コンポーネント
-- `MainWindow.xaml` / `MainWindow.xaml.cs`
-- `ViewModels/MainViewModel`
-- `Models/MarketSnapshot`
-- `Services/ApiService`
-- `Infrastructure/AsyncRelayCommand`
-- `Infrastructure/RelayCommand`
-
-#### 3.10 入力/出力
-- 入力
-  - ユーザー操作（更新、銘柄名または銘柄コード入力）
-- 出力
-  - UI上の現在値表示
-  - ログファイルへの出力
-
-#### 3.11 設計方針
-- UIロジックはViewModelに集約
-- データバインディングを活用
-- コードビハインドは最小限に抑制
-
-#### 3.11.1 実装状況（2026-04-05）
-- 実装済み: メインウィンドウ、手動更新、自動更新切替、カード形式の現在値表示
-- 実装済み: `MainViewModel` による状態管理（Symbol、更新間隔、ステータスメッセージ）
-- 実装済み: `ApiService` による為替（USD/JPY）と株価（Symbol指定）の取得
-- 実装済み: 手動更新・自動更新開始/停止・更新成否のUI操作ログ出力（Serilog）
-- 実装済み: 日本株シンボル（`.T`）でAlpha Vantage取得失敗時はStooqへフォールバック
-- 補足: `ALPHA_VANTAGE_API_KEY` 未設定時は `demo` キーを使用
+### 5.2 表示ルール
+- 為替表示領域は持たない。
+- 銘柄入力欄の例示は日本株入力例のみを表示する。
+- チャート領域は常時表示し、データ 0 件時は空コレクションを表示する。
+- 横軸ラベルは表示件数に応じて間引いて可読性を優先する。
+- 各足にマウスオーバーした場合は日付、始値、終値、高値、安値のツールチップを表示する。
+- 指標切替 UI は ItemsControl 上の個別 CheckBox で構成し、将来の出来高や MACD も同じ枠組みに追加できるようにする。
+- 現在の価格チャートオーバーレイ指標は MA5、MA25、MA75 とする。
+- オフにした指標は描画対象と凡例の双方から除外する。
 
 ---
 
-### Phase 3: データの蓄積と視覚化
-#### 3.12 目的
-- 過去データを保存し、チャート表示を実現する。
+## 6. Composition 設計
 
-#### 3.12.1 対象となる全体設計
-- 2.1 提供機能: データ蓄積と可視化
-- 2.2 入力: 取得データ、日付範囲
-- 2.3 出力: データ保存、チャート表示
-- 2.4 システム構成: WPF本線にストレージ/チャート機能を追加
-- 2.5 アーキテクチャ方針: リポジトリパターン、UI/DB分離
+### 6.1 AppBootstrapper
+- logger, httpService, cache, tokyoPrimeSymbolResolver, marketSymbolResolver を生成する。
+- MarketSnapshotService、PriceHistoryFeatureService、JapaneseStockChartFeatureService を組み立てる。
+- MainViewModel を生成して MainWindow へ渡す。
 
-#### 3.12.2 関連コンポーネント
-- StorageService: データ保存・読み出し
-- MarketMonitor_WPF: チャート表示と履歴表示
-
-#### 3.12.3 Phase 3の可視化フロー
-```mermaid
-flowchart TD
-    A[ApiService] --> S[StorageService]
-    S --> DB[SQLite]
-    S --> V[ChartViewModel]
-    V --> C[ChartView]
-    U[ユーザー] --> C
-```
-
-#### 3.13 対象機能
-- SQLiteによるローカルDB保存
-- 折れ線グラフ表示
-- 過去価格データの閲覧
-
-#### 3.14 主要コンポーネント
-- `Data/MarketHistoryRepository`
-- `Models/PriceHistoryEntry`
-- `Services/StorageService`
-- `Views/ChartView`
-- `ViewModels/ChartViewModel`
-
-#### 3.15 入力/出力
-- 入力
-  - 取得したマーケットデータ
-  - 日付範囲選択
-- 出力
-  - SQLite保存結果
-  - グラフ表示
-
-#### 3.16 設計方針
-- リポジトリパターンでデータアクセスを分離
-- UIとDBアクセスを分離
-- チャートはLiveCharts2などのライブラリを採用
+### 6.2 App.xaml.cs
+- 起動時に AppLoggingConfigurator を実行する。
+- AppBootstrapper から MainWindow を生成して表示する。
 
 ---
 
-### Phase 4: 高度な分析・通知機能
-#### 3.17 目的
-- 分析系機能と通知機能を追加し、実用性を高める。
+## 7. テスト設計
 
-#### 3.17.1 対象となる全体設計
-- 2.1 提供機能: テクニカル指標、通知機能
-- 2.2 入力: 価格履歴データ、閾値/通知条件
-- 2.3 出力: チャート描画、通知ポップアップ
-- 2.4 システム構成: WPF本線の分析/通知サービス追加
-- 2.5 アーキテクチャ方針: サービス分離、テスト可能な通知実装
+### 7.1 単体テスト対象
+| 要求 ID | テスト対象 |
+| --- | --- |
+| FR-01 | MarketSymbolResolver, TokyoPrimeSymbolResolver |
+| FR-02 | MarketSnapshotService |
+| FR-03, FR-04, FR-09 | Features/Dashboard/ViewModels/MainViewModel |
+| FR-05, FR-06 | SqlitePriceHistoryRepository, PriceHistoryFeatureService |
+| FR-07, FR-08 | JapaneseCandleService, JapaneseStockChartFeatureService |
 
-#### 3.17.2 関連コンポーネント
-- AnalyticsService: 指標計算ロジック
-- NotificationService: 通知発行
-- MarketMonitor_WPF: 指標表示と通知トリガー
-
-#### 3.17.3 Phase 4の可視化フロー
-```mermaid
-flowchart TD
-    H[PriceHistory] --> A[AnalyticsService]
-    A --> C[ChartView]
-    T[Trigger] --> N[NotificationService]
-    N --> U[ユーザー通知]
-```
-
-#### 3.18 対象機能
-- 移動平均線（MA）表示
-- MACDなどのテクニカル指標
-- 価格到達通知
-- セクター別比較
-
-#### 3.19 主要コンポーネント
-- `Services/AnalyticsService`
-- `Models/TechnicalIndicatorResult`
-- `Services/NotificationService`
-- `ViewModels/IndicatorViewModel`
-
-#### 3.20 入力/出力
-- 入力
-  - 価格履歴データ
-  - 閾値・通知条件
-- 出力
-  - チャートへの指標描画
-  - 通知ポップアップ
-
-#### 3.21 設計方針
-- 分析ロジックはサービス化してテスト可能にする
-- 通知はUIとは分離し、テストしやすいインターフェースで実装
-- 計算ロジックはユニットテストで網羅
+### 7.2 テスト観点
+- 4 桁コードの .T 補完
+- 東証プライム外入力の拒否
+- Yahoo Finance JSON の現在値解析
+- Stooq CSV の現在値解析
+- 手動更新時の画面反映
+- 自動更新間隔の下限補正
+- 履歴保存とバー生成
+- 旧 DB スキーマの移行
+- ローソク足の期間切替と色指定
 
 ---
 
-## 4. テスト設計
-- テストプロジェクトは `[対応するプロジェクト名]Test` とする。
-- テストファイルは `[対応するクラス名]Test.cs` とする。
-- コメントは日本語で記載し、テスト対象と期待値を明記。
-- 主要サービスのロジックはユニットテストでカバーする。
-- API呼び出しやJSONパースはモック化/分離可能に設計する。
-- Phase2では `MarketMonitorTest/MainViewModelTest.cs` を追加し、初期取得、更新間隔補正、自動更新切替、例外時表示を検証済み。
+## 8. 整合維持ルール
+- 仕様変更時は、仕様書の要求 ID 単位で設計書の該当節を更新する。
+- 設計変更時は、対応する実装クラス、インターフェース、テストを同一変更で更新する。
+- 実装に新しい public 型を追加する場合は、設計書へ対応責務を追加する。
+- 実装から public 型を削除する場合は、設計書と仕様書のトレーサビリティ表からも削除する。
 
-## 5. 今後の拡張方針
-- APIキー管理を設定ファイル/シークレット管理に移行
-- 日本株の取得に対応するデータソース追加
-- WPF UIの多言語化とアクセシビリティ対応
-- リアルタイムストリーミング対応の検討
+---
+
+## 9. 実装マッピング
+| 要求 ID | 実装 |
+| --- | --- |
+| FR-01 | Shared/MarketData/MarketSymbolResolver, Shared/MarketData/TokyoPrimeSymbolResolver |
+| FR-02 | Features/MarketSnapshot/Services/MarketSnapshotService |
+| FR-03 | Features/Dashboard/ViewModels/MainViewModel.RefreshAsync |
+| FR-04 | Features/Dashboard/ViewModels/MainViewModel.ToggleAutoUpdate |
+| FR-05 | Features/PriceHistory/Services/SqlitePriceHistoryRepository.SaveAsync |
+| FR-06 | Features/PriceHistory/Services/PriceHistoryFeatureService.RecordAndLoadAsync |
+| FR-07 | Features/JapaneseStockChart/Services/JapaneseCandleService |
+| FR-08 | Features/Dashboard/ViewModels/MainViewModel.ChangeCandlesAsync, ChangeCandlePeriodAsync |
+| FR-09 | Features/Dashboard/ViewModels/MainViewModel.StatusMessage |
+| FR-10 | Composition/AppLoggingConfigurator, Shared/Logging/SerilogAppLogger |
+
+以上により、本設計書は [SPECIFICATION.md](SPECIFICATION.md) から再生成可能であり、かつ実装を一意に導ける粒度を維持する。

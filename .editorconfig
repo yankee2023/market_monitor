@@ -1,0 +1,7 @@
+root = true
+
+[*.cs]
+dotnet_diagnostic.CA1707.severity = suggestion
+
+[**/*Test.cs]
+dotnet_diagnostic.CA1707.severity = none

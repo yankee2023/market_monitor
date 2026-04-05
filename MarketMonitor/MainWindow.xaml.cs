@@ -1,34 +1,31 @@
 ﻿using System.Windows;
-using MarketMonitor.Services;
-using MarketMonitor.ViewModels;
+using MarketMonitor.Composition;
 
 namespace MarketMonitor
 {
     /// <summary>
     /// メイン画面を表示するウィンドウ。
     /// </summary>
-    public partial class MainWindow : Window
+    public partial class MainWindow : Window, IMainWindowShell
     {
-        private readonly MainViewModel _viewModel;
+        private readonly IMainWindowViewModel _viewModel;
 
-        public MainWindow()
+        /// <summary>
+        /// ViewModelを受け取って画面を初期化する。
+        /// </summary>
+        /// <param name="viewModel">画面にバインドするViewModel。</param>
+        internal MainWindow(IMainWindowViewModel viewModel)
         {
             InitializeComponent();
-            _viewModel = new MainViewModel(new ApiService(), new SerilogAppLogger());
+            _viewModel = viewModel;
             DataContext = _viewModel;
 
             Loaded += OnLoaded;
-            Closed += OnClosed;
         }
 
         private async void OnLoaded(object sender, RoutedEventArgs e)
         {
-            await _viewModel.InitializeAsync();
-        }
-
-        private void OnClosed(object? sender, System.EventArgs e)
-        {
-            _viewModel.Dispose();
+            await MainWindowLifecycleService.InitializeAsync(_viewModel);
         }
     }
 }

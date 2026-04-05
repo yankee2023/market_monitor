@@ -126,6 +126,8 @@ This document outlines the guidelines and best practices for developing C# appli
 - Pin package versions to ensure stability.
 - Regularly update dependencies for security patches.
 - Avoid unnecessary dependencies.
+- When adding or updating external libraries, also update the third-party license markdown file and any README reference to it.
+- If license rules require source code changes, make the necessary code updates as part of the change and insert a comment that clearly indicates the change is for license compliance.
 
 ## 11. Code Quality Tools
 <!-- コード品質ツール -->

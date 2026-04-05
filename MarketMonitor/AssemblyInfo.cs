@@ -1,10 +1,12 @@
 using System.Windows;
+using System.Runtime.CompilerServices;
 
 [assembly: ThemeInfo(
-    ResourceDictionaryLocation.None,            //where theme specific resource dictionaries are located
-                                                //(used if a resource is not found in the page,
-                                                // or application resource dictionaries)
-    ResourceDictionaryLocation.SourceAssembly   //where the generic resource dictionary is located
-                                                //(used if a resource is not found in the page,
-                                                // app, or any theme specific resource dictionaries)
+    ResourceDictionaryLocation.None,
+    // テーマ固有のリソースディクショナリの配置先。
+    // ページまたはアプリケーションのリソースで見つからない場合に使用される。
+    ResourceDictionaryLocation.SourceAssembly
+    // 共通リソースディクショナリの配置先。
+    // ページ、アプリケーション、テーマ固有辞書のいずれにも存在しない場合に使用される。
 )]
+[assembly: InternalsVisibleTo("MarketMonitorTest")]

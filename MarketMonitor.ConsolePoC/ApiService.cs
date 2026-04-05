@@ -1,59 +1,53 @@
+using System.Globalization;
 using System.Net.Http;
 using System.Text.Json;
 using Serilog;
 
+namespace MarketMonitor.ConsolePoC;
+
 /// <summary>
-/// Alpha Vantage APIとの通信を担当するサービスクラス。
+/// 日本株の現在値取得を検証するためのサービスクラス。
 /// </summary>
-public class ApiService
+public sealed class ApiService
 {
     private readonly HttpClient _client;
-    private readonly string _apiKey;
 
     /// <summary>
-    /// ApiServiceのコンストラクタ。
+    /// ApiService のコンストラクタ。
     /// </summary>
-    /// <param name="client">HTTPクライアント。</param>
-    /// <param name="apiKey">Alpha Vantage APIキー。</param>
-    public ApiService(HttpClient client, string apiKey)
+    /// <param name="client">HTTP クライアント。</param>
+    public ApiService(HttpClient client)
     {
-        _client = client;
-        _apiKey = apiKey;
+        _client = client ?? throw new ArgumentNullException(nameof(client));
     }
 
     /// <summary>
-    /// USDからJPYへの為替レートを取得してログに出力します。
+    /// 指定された日本株の株価を取得してログに出力します。
     /// </summary>
-    public async Task GetExchangeRate()
-    {
-        string url = $"https://www.alphavantage.co/query?function=CURRENCY_EXCHANGE_RATE&from_currency=USD&to_currency=JPY&apikey={_apiKey}";
-        await FetchAndLogData(url, "為替レート", ParseExchangeRate);
-    }
-
-    /// <summary>
-    /// 指定された銘柄の株価を取得してログに出力します。
-    /// </summary>
-    /// <param name="symbol">株価を取得する銘柄シンボル（例: IBM, 9984.T）。</param>
+    /// <param name="symbol">株価を取得する銘柄シンボルまたは 4 桁コード。</param>
     public async Task GetStockPrice(string symbol)
     {
-        string url = $"https://www.alphavantage.co/query?function=TIME_SERIES_INTRADAY&symbol={symbol}&interval=5min&apikey={_apiKey}";
-        await FetchAndLogData(url, $"株価 ({symbol})", response => ParseStockPrice(response, symbol));
+        var normalizedSymbol = NormalizeSymbol(symbol);
+        if (!IsJapaneseStock(normalizedSymbol))
+        {
+            throw new InvalidOperationException("東証銘柄コードまたは .T 付きシンボルを指定してください。");
+        }
+
+        var url = $"https://query1.finance.yahoo.com/v8/finance/chart/{Uri.EscapeDataString(normalizedSymbol)}?range=5d&interval=1d&includePrePost=false&events=div%2Csplits";
+        await FetchAndLogData(url, $"株価 ({normalizedSymbol})", response => ParseStockPrice(response, normalizedSymbol));
     }
 
     /// <summary>
-    /// APIからデータを取得し、パース関数で処理してログに出力します。
+    /// API からデータを取得し、パース関数で処理してログに出力します。
     /// </summary>
-    /// <param name="url">APIのURL。</param>
-    /// <param name="dataType">データの種類（ログ用）。</param>
-    /// <param name="parseFunc">レスポンスをパースする関数。</param>
     private async Task FetchAndLogData(string url, string dataType, Func<string, bool> parseFunc)
     {
         try
         {
-            string response = await _client.GetStringAsync(url);
+            var response = await _client.GetStringAsync(url);
             if (!parseFunc(response))
             {
-                string responseSnippet = response.Length < 500 ? response : response.Substring(0, 500);
+                var responseSnippet = response.Length < 500 ? response : response[..500];
                 Log.Error("{DataType}の取得に失敗しました。レスポンス: {Response}", dataType, responseSnippet);
             }
         }
@@ -64,58 +58,71 @@ public class ApiService
     }
 
     /// <summary>
-    /// 為替レートのレスポンスをパースしてログに出力します。
+    /// 株価レスポンスをパースしてログに出力します。
     /// </summary>
-    /// <param name="response">APIレスポンス。</param>
-    /// <returns>パース成功の場合true。</returns>
-    private bool ParseExchangeRate(string response)
+    private static bool ParseStockPrice(string response, string symbol)
     {
-        var json = JsonDocument.Parse(response);
+        using var json = JsonDocument.Parse(response);
         var root = json.RootElement;
 
-        if (root.TryGetProperty("Realtime Currency Exchange Rate", out var exchangeRate))
+        if (!root.TryGetProperty("chart", out var chart)
+            || !chart.TryGetProperty("result", out var resultArray)
+            || resultArray.ValueKind != JsonValueKind.Array
+            || resultArray.GetArrayLength() == 0)
         {
-            string fromCurrency = exchangeRate.GetProperty("1. From_Currency Code").GetString() ?? "Unknown";
-            string toCurrency = exchangeRate.GetProperty("3. To_Currency Code").GetString() ?? "Unknown";
-            string rate = exchangeRate.GetProperty("5. Exchange Rate").GetString() ?? "0";
+            return false;
+        }
 
-            Log.Information("為替レート: {From} to {To} = {Rate}", fromCurrency, toCurrency, rate);
+        var result = resultArray[0];
+        if (result.TryGetProperty("meta", out var meta)
+            && meta.TryGetProperty("regularMarketPrice", out var regularMarketPrice)
+            && TryGetDecimal(regularMarketPrice, out var price))
+        {
+            Log.Information("株価 ({Symbol}): 最新値 = {Price} 円", symbol, price);
             return true;
         }
+
         return false;
     }
 
     /// <summary>
-    /// 株価のレスポンスをパースしてログに出力します。
+    /// 入力を東証シンボルへ正規化します。
     /// </summary>
-    /// <param name="response">APIレスポンス。</param>
-    /// <param name="symbol">銘柄シンボル。</param>
-    /// <returns>パース成功の場合true。</returns>
-    private bool ParseStockPrice(string response, string symbol)
+    private static string NormalizeSymbol(string symbol)
     {
-        var json = JsonDocument.Parse(response);
-        var root = json.RootElement;
+        ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
 
-        if (root.TryGetProperty("Time Series (5min)", out var timeSeries))
+        var trimmed = symbol.Trim();
+        if (trimmed.Length == 4 && trimmed.All(char.IsDigit))
         {
-            var latestEntry = timeSeries.EnumerateObject().First();
-            var data = latestEntry.Value;
-
-            string closePrice = data.GetProperty("4. close").GetString() ?? "0";
-            string unit = IsJapaneseStock(symbol) ? "円" : "ドル";
-            Log.Information("株価 ({Symbol}): 最新終値 = {Price} {Unit}", symbol, closePrice, unit);
-            return true;
+            return $"{trimmed}.T";
         }
-        return false;
+
+        if (trimmed.EndsWith(".T", StringComparison.OrdinalIgnoreCase))
+        {
+            return trimmed.ToUpperInvariant();
+        }
+
+        return trimmed;
     }
 
     /// <summary>
     /// シンボルが日本株かどうかを判定します。
     /// </summary>
-    /// <param name="symbol">銘柄シンボル。</param>
-    /// <returns>日本株の場合true。</returns>
     private static bool IsJapaneseStock(string symbol)
     {
-        return symbol.EndsWith(".T");
+        return symbol.EndsWith(".T", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryGetDecimal(JsonElement element, out decimal value)
+    {
+        value = 0m;
+
+        return element.ValueKind switch
+        {
+            JsonValueKind.Number => element.TryGetDecimal(out value),
+            JsonValueKind.String => decimal.TryParse(element.GetString(), NumberStyles.Float, CultureInfo.InvariantCulture, out value),
+            _ => false
+        };
     }
 }
