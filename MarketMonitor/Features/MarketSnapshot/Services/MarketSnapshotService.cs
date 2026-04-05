@@ -64,12 +64,12 @@ public sealed class MarketSnapshotService : IMarketSnapshotService
                 return yahooPrice;
             }
         }
-        catch (InvalidOperationException ex) when (IsRateLimitException(ex) && _cache.TryGetStockPrice(symbol, out cachedPrice))
+        catch (InvalidOperationException ex) when (ApiErrorClassifier.IsRateLimitException(ex) && _cache.TryGetStockPrice(symbol, out cachedPrice))
         {
             _logger?.Info($"StockPriceRateLimitedUsingCache: Symbol={symbol}, Price={cachedPrice}, Message={ex.Message}");
             return cachedPrice;
         }
-        catch (InvalidOperationException ex) when (IsRateLimitException(ex))
+        catch (InvalidOperationException ex) when (ApiErrorClassifier.IsRateLimitException(ex))
         {
             _logger?.Info($"StockPricePrimarySourceRateLimited: Symbol={symbol}, Source=YahooFinance, Fallback=Stooq, Message={ex.Message}");
         }
@@ -254,11 +254,5 @@ public sealed class MarketSnapshotService : IMarketSnapshotService
     {
         var normalized = response.Replace("\r", " ").Replace("\n", " ").Trim();
         return normalized.Length <= 180 ? normalized : normalized[..180];
-    }
-
-    private static bool IsRateLimitException(InvalidOperationException exception)
-    {
-        ArgumentNullException.ThrowIfNull(exception);
-        return exception.Message.StartsWith(ApiErrorMessages.RateLimitMessage, StringComparison.Ordinal);
     }
 }

@@ -15,4 +15,33 @@ public sealed class AppBootstrapperTest
         Assert.IsType<MainViewModel>(viewModel);
         Assert.Equal("7203", ((MainViewModel)viewModel).Symbol);
     }
+
+    [Fact]
+    public void CreateMainWindow_ResolvesWindowAndViewModelFromContainer()
+    {
+        Exception? capturedException = null;
+
+        var thread = new Thread(() =>
+        {
+            try
+            {
+                var window = AppBootstrapper.CreateMainWindow();
+
+                Assert.NotNull(window);
+                Assert.IsType<MainViewModel>(window.DataContext);
+
+                window.Close();
+            }
+            catch (Exception ex)
+            {
+                capturedException = ex;
+            }
+        });
+
+        thread.SetApartmentState(ApartmentState.STA);
+        thread.Start();
+        thread.Join();
+
+        Assert.Null(capturedException);
+    }
 }

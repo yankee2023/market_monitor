@@ -1,4 +1,6 @@
 using System.IO;
+using Microsoft.Extensions.DependencyInjection;
+using MarketMonitor.Features.Dashboard.Services;
 using MarketMonitor.Features.Dashboard.ViewModels;
 using MarketMonitor.Features.JapaneseStockChart.Services;
 using MarketMonitor.Features.MarketSnapshot.Services;
@@ -15,31 +17,15 @@ namespace MarketMonitor.Composition;
 /// </summary>
 internal static class AppBootstrapper
 {
+    private static readonly Lazy<ServiceProvider> RootServiceProvider = new(CreateServiceProvider);
+
     /// <summary>
     /// メイン画面用の ViewModel を生成する。
     /// </summary>
     /// <returns>初期化済みの ViewModel。</returns>
     internal static MainViewModel CreateMainViewModel()
     {
-        var logger = new SerilogAppLogger();
-        var httpService = new RateLimitedHttpService();
-        var cache = new MarketDataCache();
-        var tokyoListedSymbolResolver = new TokyoListedSymbolResolver(
-            httpService,
-            new JpxExcelCompanyRecordReader(),
-            CreateMarketSegmentPolicy(logger));
-        var marketSymbolResolver = new MarketSymbolResolver(tokyoListedSymbolResolver, logger);
-        var marketSnapshotService = new MarketSnapshotService(logger, httpService, cache, marketSymbolResolver);
-
-        return new MainViewModel(
-            marketSnapshotService,
-            new PriceHistoryFeatureService(new SqlitePriceHistoryRepository(logger), logger),
-            new JapaneseStockChartFeatureService(
-                new JapaneseCandleService(logger, httpService, cache, marketSymbolResolver),
-                logger),
-            new SectorComparisonFeatureService(marketSymbolResolver, marketSnapshotService, logger),
-            logger,
-            new WindowsDesktopNotificationService());
+        return RootServiceProvider.Value.GetRequiredService<MainViewModel>();
     }
 
     /// <summary>
@@ -48,10 +34,47 @@ internal static class AppBootstrapper
     /// <returns>初期化済みのメインウィンドウ。</returns>
     public static MainWindow CreateMainWindow()
     {
-        return new MainWindow(CreateMainViewModel());
+        return RootServiceProvider.Value.GetRequiredService<MainWindow>();
     }
 
-    private static ITokyoMarketSegmentPolicy CreateMarketSegmentPolicy(SerilogAppLogger logger)
+    private static ServiceProvider CreateServiceProvider()
+    {
+        var services = new ServiceCollection();
+        ConfigureServices(services);
+        return services.BuildServiceProvider(new ServiceProviderOptions
+        {
+            ValidateOnBuild = true,
+            ValidateScopes = false
+        });
+    }
+
+    private static void ConfigureServices(IServiceCollection services)
+    {
+        ArgumentNullException.ThrowIfNull(services);
+
+        services.AddSingleton<IAppLogger, SerilogAppLogger>();
+        services.AddSingleton<IRateLimitedHttpService, RateLimitedHttpService>();
+        services.AddSingleton<MarketDataCache>();
+        services.AddSingleton<ITokyoListedCompanyRecordReader, JpxExcelCompanyRecordReader>();
+        services.AddSingleton<ITokyoMarketSegmentPolicy>(serviceProvider =>
+            CreateMarketSegmentPolicy(serviceProvider.GetRequiredService<IAppLogger>()));
+        services.AddSingleton<ITokyoListedSymbolResolver, TokyoListedSymbolResolver>();
+        services.AddSingleton<MarketSymbolResolver>();
+        services.AddSingleton<IMarketSnapshotService, MarketSnapshotService>();
+        services.AddSingleton<IPriceHistoryRepository, SqlitePriceHistoryRepository>();
+        services.AddSingleton<IPriceHistoryFeatureService, PriceHistoryFeatureService>();
+        services.AddSingleton<IJapaneseCandleService, JapaneseCandleService>();
+        services.AddSingleton<IJapaneseStockChartFeatureService, JapaneseStockChartFeatureService>();
+        services.AddSingleton<ISectorComparisonFeatureService, SectorComparisonFeatureService>();
+        services.AddSingleton<IChartIndicatorSelectionService, ChartIndicatorSelectionService>();
+        services.AddTransient<IDesktopNotificationService, WindowsDesktopNotificationService>();
+        services.AddTransient<MainViewModel>();
+        services.AddTransient<IMainWindowViewModel>(serviceProvider => serviceProvider.GetRequiredService<MainViewModel>());
+        services.AddTransient<MainWindow>(serviceProvider =>
+            new MainWindow(serviceProvider.GetRequiredService<IMainWindowViewModel>()));
+    }
+
+    private static ITokyoMarketSegmentPolicy CreateMarketSegmentPolicy(IAppLogger logger)
     {
         ArgumentNullException.ThrowIfNull(logger);
 

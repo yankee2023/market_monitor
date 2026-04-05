@@ -366,9 +366,7 @@
 | 項目 ID | 項目名 | 種別 | 入出力 | 必須 | 仕様 |
 | --- | --- | --- | --- | --- | --- |
 | UI-01-01 | 銘柄名/コード入力 | TextBox | 入力 | はい | 例: 7203 / トヨタ |
-| UI-01-02 | 自動更新秒数 | TextBox | 入力 | はい | 10 未満は 10 に補正 |
-| UI-01-03 | 手動更新 | Button | 入力 | はい | FR-03 を起動 |
-| UI-01-04 | 自動更新 ON/OFF | Button | 入力 | はい | FR-04 を切替 |
+| UI-01-03 | 表示ボタン | Button | 入力 | はい | FR-03 を起動 |
 | UI-01-05 | 日足ボタン | Button | 入力 | はい | 既定選択あり |
 | UI-01-06 | 週足ボタン | Button | 入力 | はい | 既定選択なし |
 | UI-01-07 | 1か月ボタン | Button | 入力 | はい | 既定選択あり |
@@ -384,7 +382,6 @@
 | UI-01-17 | ローソク足横軸 | TextBlock | 出力 | はい | 日付ラベルを表示 |
 | UI-01-18 | チャートツールチップ | ToolTip | 出力 | はい | 日付、始値、終値、高値、安値を表示 |
 | UI-01-19 | ステータス表示 | TextBox | 出力 | はい | 処理状態と結果を表示 |
-| UI-01-20 | 自動更新状態表示 | TextBlock | 出力 | はい | オン/オフを表示 |
 | UI-01-21 | 下段指標パネル | ItemsControl | 出力 | いいえ | MACD / シグナルを表示 |
 | UI-01-21A | 出来高パネル | ItemsControl | 出力 | いいえ | 出来高バーを表示 |
 | UI-01-21B | RSI パネル | ItemsControl | 出力 | いいえ | RSI ラインを表示 |
@@ -398,7 +395,7 @@
 | 状態 ID | 状態名 | 条件 | 表示ルール |
 | --- | --- | --- | --- |
 | ST-01 | 初期状態 | 起動直後 | Symbol=7203、Status=準備完了 |
-| ST-02 | 更新中 | 手動または自動更新開始 | Status=データ取得中... |
+| ST-02 | 更新中 | 手動更新開始 | Status=データ取得中... |
 | ST-03 | 正常表示 | 現在値取得成功 | 会社名、株価、ローソク足を更新 |
 | ST-04 | エラー状態 | 例外発生 | Status に失敗理由を表示 |
 
@@ -557,7 +554,7 @@
 | FR-02 | Features/MarketSnapshot のサービス |
 | FR-05, FR-06 | Features/PriceHistory のサービスおよびリポジトリ |
 | FR-07, FR-08 | Features/JapaneseStockChart のサービスと描画モデル |
-| FR-03, FR-04, FR-09 | Features/Dashboard の ViewModel |
+| FR-03, FR-09 | Features/Dashboard の ViewModel |
 | FR-10 | Shared/Logging および Composition の設定 |
 
 ### 11.4 設計インターフェース生成規則
@@ -626,7 +623,7 @@
 | FR-01 | 入力解決、JPX 参照、シンボル正規化 | Shared/MarketData/MarketSymbolResolver, Shared/MarketData/TokyoListedSymbolResolver |
 | FR-02 | 現在値取得、フォールバック制御 | Features/MarketSnapshot/Services/MarketSnapshotService |
 | FR-03 | 手動更新フロー制御 | Features/Dashboard/ViewModels/MainViewModel |
-| FR-04 | タイマー更新制御 | Features/Dashboard/ViewModels/MainViewModel |
+| FR-04 | 廃止済み機能 | 実装対象なし |
 | FR-05 | SQLite 保存と移行 | Features/PriceHistory/Services/SqlitePriceHistoryRepository |
 | FR-06 | 履歴再読込、バー生成 | Features/PriceHistory/Services/PriceHistoryFeatureService |
 | FR-07 | ローソク足取得と描画データ化 | Features/JapaneseStockChart/Services/JapaneseCandleService, Features/JapaneseStockChart/Services/CandlestickRenderService |
@@ -642,7 +639,6 @@
 - 4 桁コード入力で .T が補完されること。
 - 東証銘柄名が一意に解決されること。
 - 手動更新で現在値、履歴、ローソク足が一括更新されること。
-- 自動更新間隔 9 秒入力時に 10 秒へ補正されること。
 - 履歴 DB に symbol, stock_price, recorded_at が保存されること。
 - 旧 DB に exchange_rate 列があっても履歴保存と読込が継続できること。
 - チャート領域に縦軸の株価ラベルと横軸の日付ラベルが表示されること。

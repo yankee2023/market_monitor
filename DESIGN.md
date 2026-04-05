@@ -62,26 +62,26 @@
 - Features/Dashboard → Feature 入口インターフェース
 - Feature → Shared
 - Shared は Feature を参照しない
-- Composition のみ concrete 実装を new する
+- Composition のみ concrete 実装を DI コンテナへ登録し、画面起動時に解決する
 
 ```mermaid
 flowchart LR
-    View[MainWindow.xaml] --> Dashboard[Features/Dashboard/MainViewModel]
-    Dashboard --> Snapshot[IMarketSnapshotService]
-    Dashboard --> History[IPriceHistoryFeatureService]
-    Dashboard --> Chart[IJapaneseStockChartFeatureService]
-    Dashboard --> Sector[ISectorComparisonFeatureService]
-    Dashboard --> Notify[IDesktopNotificationService]
-    Snapshot --> Shared[Shared/MarketData]
-    Chart --> Shared
-    Sector --> Shared
-    History --> Logging[Shared/Logging]
-    Composition[Composition/AppBootstrapper] --> Dashboard
-    Composition --> Snapshot
-    Composition --> History
-    Composition --> Chart
-    Composition --> Sector
-    Composition --> Notify
+    View[MainWindow.xaml] -->|binds| Dashboard[Features/Dashboard/MainViewModel]
+    Dashboard -->|uses| Snapshot[IMarketSnapshotService]
+    Dashboard -->|uses| History[IPriceHistoryFeatureService]
+    Dashboard -->|uses| Chart[IJapaneseStockChartFeatureService]
+    Dashboard -->|uses| Sector[ISectorComparisonFeatureService]
+    Dashboard -->|uses| Notify[IDesktopNotificationService]
+    Snapshot -->|uses| Shared[Shared/MarketData]
+    Chart -->|uses| Shared
+    Sector -->|uses| Shared
+    History -->|uses| Logging[Shared/Logging]
+    Composition[Composition/AppBootstrapper] -.->|registers| Dashboard
+    Composition -.->|registers| Snapshot
+    Composition -.->|registers| History
+    Composition -.->|registers| Chart
+    Composition -.->|registers| Sector
+    Composition -.->|registers| Notify
 ```
 
 ---
@@ -103,7 +103,7 @@ flowchart LR
 | 共通抽象 | Shared/MarketData/ITokyoListedSymbolResolver |
 | 共通ポリシー | Shared/MarketData/ITokyoMarketSegmentPolicy, Shared/MarketData/TokyoMainMarketSegmentPolicy, Shared/MarketData/ConfigurableTokyoMarketSegmentPolicy |
 | 共通設定 | Shared/MarketData/ITokyoMarketSegmentSettingsProvider, Shared/MarketData/JsonTokyoMarketSegmentSettingsProvider |
-| 共通補助 | Shared/MarketData/ApiErrorMessages |
+| 共通補助 | Shared/MarketData/ApiErrorMessages, Shared/MarketData/ApiErrorClassifier |
 
 #### 4.1.3 インターフェース契約
 - 入力: string symbol, CancellationToken
@@ -113,6 +113,46 @@ flowchart LR
 #### 4.1.4 異常系契約
 - JPX 取得失敗時は解決失敗として扱う。
 - 解決結果が .T に到達しない場合は利用者向け入力エラーを返す。
+
+#### 4.1.5 クラス図
+本図は、入力解決機能を構成する主要クラス間の関連を表す。
+```mermaid
+classDiagram
+    class MarketSymbolResolver {
+        +ResolveAsync(symbol, cancellationToken)
+    }
+    class TokyoListedSymbolResolver {
+        +ResolveAsync(symbol, cancellationToken)
+    }
+
+    ITokyoListedSymbolResolver ().. MarketSymbolResolver
+    ITokyoListedSymbolResolver ()-- TokyoListedSymbolResolver
+    ITokyoListedCompanyRecordReader ().. TokyoListedSymbolResolver
+    ITokyoMarketSegmentPolicy ().. TokyoListedSymbolResolver
+```
+
+#### 4.1.6 シーケンス図
+本図は、入力文字列を東証シンボルへ正規化する代表的な処理シーケンスを表す。
+```mermaid
+sequenceDiagram
+    participant VM as MainViewModel
+    participant Resolver as MarketSymbolResolver
+    participant Tokyo as TokyoListedSymbolResolver
+    participant Reader as ITokyoListedCompanyRecordReader
+    participant Policy as ITokyoMarketSegmentPolicy
+
+    VM-)Resolver: ResolveAsync(input)
+    Resolver->>Resolver: 4桁コード・.T・別名を先に判定
+    alt JPX一覧が必要
+        Resolver-)Tokyo: ResolveAsync(input)
+        Tokyo-)Reader: ReadAsync(stream)
+        Reader-->>Tokyo: 上場銘柄一覧
+        Tokyo->>Policy: IsSupported(segment)
+        Policy-->>Tokyo: true / false
+        Tokyo-->>Resolver: normalizedSymbol
+    end
+    Resolver-->>VM: normalizedSymbol
+```
 
 ### 4.2 FR-02 現在値取得
 #### 4.2.1 責務
@@ -141,6 +181,64 @@ flowchart LR
 - Yahoo Finance 失敗時は Stooq へフォールバックする。
 - 最終的に取得不能な場合は InvalidOperationException を送出する。
 
+#### 4.2.5 クラス図
+本図は、現在値取得機能を構成する主要クラス間の関連を表す。
+```mermaid
+classDiagram
+    class MarketSnapshotService {
+        +GetSnapshotAsync(symbol, cancellationToken)
+    }
+    class MarketDataCache
+    class MarketSymbolResolver
+    class MarketSnapshot {
+        +Symbol
+        +CompanyName
+        +StockPrice
+        +StockUpdatedAt
+    }
+
+    IMarketSnapshotService ()-- MarketSnapshotService
+    IRateLimitedHttpService ().. MarketSnapshotService
+    MarketSnapshotService ..> MarketDataCache
+    MarketSnapshotService ..> MarketSymbolResolver
+    MarketSnapshotService ..> MarketSnapshot
+```
+
+#### 4.2.6 シーケンス図
+本図は、現在値取得時の Yahoo 優先、キャッシュ利用、Stooq フォールバックを含む処理シーケンスを表す。
+```mermaid
+sequenceDiagram
+    participant VM as MainViewModel
+    participant Service as MarketSnapshotService
+    participant Resolver as MarketSymbolResolver
+    participant Http as IRateLimitedHttpService
+    participant Cache as MarketDataCache
+
+    VM-)Service: GetSnapshotAsync(symbol)
+    Service-)Resolver: ResolveAsync(symbol)
+    Resolver-->>Service: normalizedSymbol
+    Service-)Http: Yahoo Finance 取得
+    alt Yahoo成功
+        Http-->>Service: quote JSON
+        Service->>Cache: 現在値を保存
+        Service-->>VM: MarketSnapshot
+    else レート制限
+        Service->>Cache: キャッシュ照会
+        alt キャッシュあり
+            Cache-->>Service: cached price
+            Service-->>VM: MarketSnapshot
+        else キャッシュなし
+            Service-)Http: Stooq 取得
+            Http-->>Service: CSV
+            Service-->>VM: MarketSnapshot
+        end
+    else Yahoo失敗
+        Service-)Http: Stooq 取得
+        Http-->>Service: CSV
+        Service-->>VM: MarketSnapshot
+    end
+```
+
 ### 4.3 FR-05, FR-06 履歴管理
 #### 4.3.1 責務
 - スナップショットを SQLite に保存する。
@@ -163,6 +261,56 @@ flowchart LR
 - テーブル名: price_history
 - カラム: id, symbol, stock_price, recorded_at
 - 旧 schema に exchange_rate が含まれる場合は、新テーブルへコピー後に置換する。
+
+#### 4.3.4 クラス図
+本図は、履歴保存と履歴読込機能を構成する主要クラス間の関連を表す。
+```mermaid
+classDiagram
+    class PriceHistoryFeatureService {
+        +RecordAndLoadAsync(snapshot, limit, cancellationToken)
+    }
+    class SqlitePriceHistoryRepository {
+        +SaveAsync(snapshot, cancellationToken)
+        +LoadRecentAsync(symbol, limit, cancellationToken)
+    }
+    class PriceHistoryBarBuilder {
+        +Build(entries)
+    }
+    class PriceHistoryEntry
+    class PriceHistoryBar
+    class PriceHistoryViewData {
+        +Items
+        +Bars
+    }
+
+    IPriceHistoryFeatureService ()-- PriceHistoryFeatureService
+    IPriceHistoryRepository ().. PriceHistoryFeatureService
+    IPriceHistoryRepository ()-- SqlitePriceHistoryRepository
+    PriceHistoryFeatureService ..> PriceHistoryBarBuilder
+    PriceHistoryFeatureService ..> PriceHistoryViewData
+    PriceHistoryViewData *-- "0..*" PriceHistoryEntry
+    PriceHistoryViewData *-- "0..*" PriceHistoryBar
+```
+
+#### 4.3.5 シーケンス図
+本図は、スナップショット保存後に直近履歴を再読込して表示用データを組み立てる処理シーケンスを表す。
+```mermaid
+sequenceDiagram
+    participant VM as MainViewModel
+    participant Feature as PriceHistoryFeatureService
+    participant Repo as IPriceHistoryRepository
+    participant Builder as PriceHistoryBarBuilder
+
+    VM-)Feature: RecordAndLoadAsync(snapshot, limit)
+    Feature-)Repo: SaveAsync(snapshot)
+    Repo->>Repo: テーブル確認・移行
+    Repo-->>Feature: 保存完了
+    Feature-)Repo: LoadRecentAsync(symbol, limit)
+    Repo-->>Feature: PriceHistoryEntry[]
+    Feature->>Builder: Build(entries)
+    Builder-->>Feature: PriceHistoryBar[]
+    Feature-->>VM: PriceHistoryViewData
+```
 
 ### 4.4 FR-07, FR-08 日本株チャート
 #### 4.4.1 責務
@@ -193,6 +341,66 @@ flowchart LR
 - Yahoo Finance: 現在値と同じ銘柄コードを使用する。
 - Stooq: .T を .jp へ変換して利用する。
 
+#### 4.4.4 クラス図
+本図は、日本株チャート機能を構成する取得系クラスと描画 DTO の関連を表す。
+```mermaid
+classDiagram
+    class JapaneseStockChartFeatureService {
+        +GetChartAsync(symbol, timeframe, period, limit, cancellationToken)
+    }
+    class JapaneseCandleService {
+        +GetCandlesAsync(symbol, timeframe, limit, cancellationToken)
+    }
+    class CandlestickRenderService {
+        +BuildViewData(candles, timeframe, period)
+    }
+    class CandlestickRenderItem
+    class ChartIndicatorDefinition
+    class ChartIndicatorRenderSeries
+    class IndicatorPanelRenderData
+    class JapaneseStockChartViewData {
+        +Candlesticks
+        +IndicatorDefinitions
+        +OverlayIndicatorSeries
+        +IndicatorPanels
+    }
+
+    IJapaneseStockChartFeatureService ()-- JapaneseStockChartFeatureService
+    IJapaneseCandleService ().. JapaneseStockChartFeatureService
+    IJapaneseCandleService ()-- JapaneseCandleService
+    JapaneseStockChartFeatureService ..> CandlestickRenderService
+    JapaneseStockChartFeatureService ..> JapaneseStockChartViewData
+    JapaneseStockChartViewData *-- "0..*" CandlestickRenderItem
+    JapaneseStockChartViewData *-- "0..*" ChartIndicatorDefinition
+    JapaneseStockChartViewData *-- "0..*" ChartIndicatorRenderSeries
+    JapaneseStockChartViewData *-- "0..*" IndicatorPanelRenderData
+```
+
+#### 4.4.5 シーケンス図
+本図は、ローソク足取得から描画用 ViewData 生成までの代表的な処理シーケンスを表す。
+```mermaid
+sequenceDiagram
+    participant VM as MainViewModel
+    participant Feature as JapaneseStockChartFeatureService
+    participant Candle as IJapaneseCandleService
+    participant Render as CandlestickRenderService
+    participant Http as IRateLimitedHttpService
+
+    VM-)Feature: GetChartAsync(symbol, timeframe, period, limit)
+    Feature-)Candle: GetCandlesAsync(symbol, timeframe, limit)
+    Candle-)Http: Yahoo Finance 取得
+    alt Yahoo成功
+        Http-->>Candle: OHLC JSON
+    else Yahoo失敗または制限
+        Candle-)Http: Stooq 取得
+        Http-->>Candle: CSV
+    end
+    Candle-->>Feature: JapaneseCandleEntry[]
+    Feature->>Render: BuildViewData(candles, timeframe, period)
+    Render-->>Feature: JapaneseStockChartViewData
+    Feature-->>VM: JapaneseStockChartViewData
+```
+
 ### 4.5 FR-03, FR-09 画面統合
 #### 4.5.1 責務
 - 銘柄入力に応じた分析表示を実行する。
@@ -206,15 +414,15 @@ flowchart LR
 | 種別 | 実装 |
 | --- | --- |
 | ViewModel | Features/Dashboard/ViewModels/MainViewModel |
+| 画面サービス | Features/Dashboard/Services/IChartIndicatorSelectionService, Features/Dashboard/Services/ChartIndicatorSelectionService |
 | 共通基盤 | Shared/Infrastructure/ObservableObject |
 | 共通基盤 | Shared/Infrastructure/RelayCommand |
 | 共通基盤 | Shared/Infrastructure/AsyncRelayCommand |
 | 共通基盤 | Shared/Infrastructure/IUiDispatcherTimer, Shared/Infrastructure/WpfDispatcherTimerAdapter |
+| Composition 補助 | Composition/WindowStartupPlacementService |
 
 #### 4.5.3 画面プロパティ契約
 - Symbol
-- AutoUpdateIntervalSeconds
-- AutoUpdateStateDisplay
 - CompanyDisplay
 - StockPriceDisplay
 - StockUpdatedAtDisplay
@@ -234,7 +442,6 @@ flowchart LR
 - SecondaryIndicatorMidLabel
 - SecondaryIndicatorMaxLabel
 - HasVisibleJapaneseChartIndicators
-- HasVisibleJapaneseSecondaryIndicators
 - JapaneseCandlestickCanvasWidth
 - AlertThresholdText
 - IsPriceAlertEnabled
@@ -242,6 +449,52 @@ flowchart LR
 - SectorComparisonItems
 - HasSectorComparisonItems
 - 足種別と表示期間の選択状態プロパティ
+
+#### 4.5.4 クラス図
+本図は、画面統合機能における MainViewModel と各機能サービスの関連を表す。
+```mermaid
+classDiagram
+    class MainViewModel {
+        +LoadAnalysisAsync()
+        +InitializeAsync()
+        +ChangeCandlesAsync(timeframe)
+        +ChangeCandlePeriodAsync(period)
+    }
+
+    IMarketSnapshotService ().. MainViewModel
+    IPriceHistoryFeatureService ().. MainViewModel
+    IJapaneseStockChartFeatureService ().. MainViewModel
+    ISectorComparisonFeatureService ().. MainViewModel
+    IChartIndicatorSelectionService ().. MainViewModel
+```
+
+#### 4.5.5 シーケンス図
+本図は、分析表示実行時に MainViewModel が各機能サービスを呼び出して画面状態を更新する処理シーケンスを表す。
+```mermaid
+sequenceDiagram
+    participant View as MainWindow
+    participant VM as MainViewModel
+    participant Snapshot as IMarketSnapshotService
+    participant History as IPriceHistoryFeatureService
+    participant Chart as IJapaneseStockChartFeatureService
+    participant Sector as ISectorComparisonFeatureService
+    participant Indicator as IChartIndicatorSelectionService
+
+    View-)VM: LoadAnalysisAsync()
+    VM-)Snapshot: GetSnapshotAsync(Symbol)
+    Snapshot-->>VM: MarketSnapshot
+    VM-)History: RecordAndLoadAsync(snapshot, limit)
+    History-->>VM: PriceHistoryViewData
+    VM-)Chart: GetChartAsync(symbol, timeframe, period, limit)
+    Chart-->>VM: JapaneseStockChartViewData
+    VM->>Indicator: CreateToggleItems(...)
+    Indicator-->>VM: ChartIndicatorToggleItem[]
+    VM->>Indicator: CreateSelection(...)
+    Indicator-->>VM: Visible overlays / panels
+    VM-)Sector: GetSectorComparisonAsync(symbol)
+    Sector-->>VM: SectorComparisonViewData
+    VM-->>View: 表示プロパティ更新
+```
 
 ### 4.6 FR-11 価格到達通知
 #### 4.6.1 責務
@@ -255,12 +508,102 @@ flowchart LR
 | 抽象 | Shared/Infrastructure/IDesktopNotificationService |
 | 実装 | Shared/Infrastructure/WindowsDesktopNotificationService |
 
+#### 4.6.3 クラス図
+本図は、価格到達通知機能における ViewModel と通知サービスの関連を表す。
+```mermaid
+classDiagram
+    class MainViewModel {
+        +EvaluatePriceAlert(snapshot)
+        +AlertThresholdText
+        +IsPriceAlertEnabled
+    }
+    class WindowsDesktopNotificationService {
+        +ShowNotification(title, message)
+        +Dispose()
+    }
+
+    IDesktopNotificationService ().. MainViewModel
+    IDesktopNotificationService ()-- WindowsDesktopNotificationService
+```
+
+#### 4.6.4 シーケンス図
+本図は、価格更新後に閾値跨ぎを判定して通知を出す処理シーケンスを表す。
+```mermaid
+sequenceDiagram
+    participant VM as MainViewModel
+    participant Notify as IDesktopNotificationService
+
+    VM->>VM: EvaluatePriceAlert(snapshot)
+    alt 通知無効 または 閾値不正
+        VM-->>VM: ベースラインを解除
+    else 閾値跨ぎ発生
+        VM->>Notify: ShowNotification(title, message)
+        Notify-->>VM: 表示完了
+    else 閾値跨ぎなし
+        VM-->>VM: 状態維持
+    end
+```
+
 ### 4.7 FR-12 セクター比較表示
 #### 4.7.1 責務
 - JPX 一覧から業種名を解決する。
 - 同一セクター比較対象を取得する。
 - 比較対象の現在値を読み込んで表示用 DTO を返す。
 - 比較対象ごとの市場区分を表示用 DTO へ含める。
+
+#### 4.7.2 設計要素
+| 種別 | 実装 |
+| --- | --- |
+| Feature 入口 | Features/SectorComparison/Services/ISectorComparisonFeatureService |
+| Feature 実装 | Features/SectorComparison/Services/SectorComparisonFeatureService |
+| DTO | Features/SectorComparison/Models/SectorComparisonViewData |
+| DTO | Features/SectorComparison/Models/SectorComparisonPeerItem |
+| 共通抽象 | Shared/MarketData/ITokyoListedSymbolResolver |
+| 参照先 | Features/MarketSnapshot/Services/IMarketSnapshotService |
+
+#### 4.7.3 クラス図
+本図は、セクター比較機能を構成する主要クラスと比較結果 DTO の関連を表す。
+```mermaid
+classDiagram
+    class SectorComparisonFeatureService {
+        +GetSectorComparisonAsync(symbol, cancellationToken)
+    }
+    class SectorComparisonViewData {
+        +SectorName
+        +Items
+    }
+    class SectorComparisonPeerItem {
+        +CompanyName
+        +Symbol
+        +MarketSegmentDisplay
+        +StockPriceDisplay
+    }
+
+    ISectorComparisonFeatureService ()-- SectorComparisonFeatureService
+    ITokyoListedSymbolResolver ().. SectorComparisonFeatureService
+    IMarketSnapshotService ().. SectorComparisonFeatureService
+    SectorComparisonFeatureService ..> SectorComparisonViewData
+    SectorComparisonViewData *-- "0..*" SectorComparisonPeerItem
+```
+
+#### 4.7.4 シーケンス図
+本図は、同一セクター候補の解決と各銘柄の現在値取得を順に行う処理シーケンスを表す。
+```mermaid
+sequenceDiagram
+    participant VM as MainViewModel
+    participant Feature as ISectorComparisonFeatureService
+    participant Resolver as ITokyoListedSymbolResolver
+    participant Snapshot as IMarketSnapshotService
+
+    VM-)Feature: GetSectorComparisonAsync(symbol)
+    Feature-)Resolver: ResolveSectorPeersAsync(symbol)
+    Resolver-->>Feature: 同業候補一覧
+    loop 最大3銘柄
+        Feature-)Snapshot: GetSnapshotAsync(peerSymbol)
+        Snapshot-->>Feature: MarketSnapshot
+    end
+    Feature-->>VM: SectorComparisonViewData
+```
 
 ### 4.8 FR-13 市場区分表示と設定
 #### 4.8.1 責務
@@ -276,27 +619,96 @@ flowchart LR
 | 共通ポリシー | Shared/MarketData/ConfigurableTokyoMarketSegmentPolicy |
 | Composition | Composition/AppBootstrapper |
 
-#### 4.7.2 設計要素
-| 種別 | 実装 |
-| --- | --- |
-| Feature 入口 | Features/SectorComparison/Services/ISectorComparisonFeatureService |
-| Feature 実装 | Features/SectorComparison/Services/SectorComparisonFeatureService |
-| DTO | Features/SectorComparison/Models/SectorComparisonViewData |
-| DTO | Features/SectorComparison/Models/SectorComparisonPeerItem |
-| 共通抽象 | Shared/MarketData/ITokyoListedSymbolResolver |
+#### 4.8.3 クラス図
+本図は、市場区分設定機能における設定プロバイダ、ポリシー、Composition の関連を表す。
+```mermaid
+classDiagram
+    class JsonTokyoMarketSegmentSettingsProvider {
+        +LoadSupportedSegments()
+    }
+    class ConfigurableTokyoMarketSegmentPolicy {
+        +IsSupported(segment)
+    }
+    class AppBootstrapper {
+        +CreateMainWindow()
+    }
 
-### 4.8 FR-10 ログ出力
+    ITokyoMarketSegmentSettingsProvider ()-- JsonTokyoMarketSegmentSettingsProvider
+    ITokyoMarketSegmentPolicy ()-- ConfigurableTokyoMarketSegmentPolicy
+    ITokyoMarketSegmentSettingsProvider ().. AppBootstrapper
+    ITokyoMarketSegmentPolicy ().. AppBootstrapper
+```
 
-#### 4.8.1 責務
+#### 4.8.4 シーケンス図
+本図は、起動時に市場区分設定を読み込み、対象ポリシーを決定する処理シーケンスを表す。
+```mermaid
+sequenceDiagram
+    participant App as AppBootstrapper
+    participant Provider as ITokyoMarketSegmentSettingsProvider
+    participant Policy as ITokyoMarketSegmentPolicy
+    participant Resolver as TokyoListedSymbolResolver
+
+    App->>Provider: LoadSupportedSegments()
+    alt 設定読込成功
+        Provider-->>App: supportedSegments
+        App->>Policy: ConfigurableTokyoMarketSegmentPolicy(supportedSegments)
+    else 設定読込失敗
+        App->>Policy: TokyoMainMarketSegmentPolicy()
+    end
+    App-->>Resolver: policy を注入
+```
+
+### 4.9 FR-10 ログ出力
+
+#### 4.9.1 責務
 - ファイルログを日次ローテーションで出力する。
 - 機能横断ログを抽象化する。
 
-#### 4.8.2 設計要素
+#### 4.9.2 設計要素
 | 種別 | 実装 |
 | --- | --- |
 | Composition | Composition/AppLoggingConfigurator |
 | 抽象 | Shared/Logging/IAppLogger |
 | 実装 | Shared/Logging/SerilogAppLogger |
+
+#### 4.9.3 クラス図
+本図は、ログ出力機能に関与するロガー抽象と利用側クラスの関連を表す。
+```mermaid
+classDiagram
+    class AppLoggingConfigurator {
+        +Configure()
+    }
+    class SerilogAppLogger {
+        +Info(message)
+        +LogError(exception, message)
+    }
+    class MainViewModel
+    class MarketSnapshotService
+    class JapaneseCandleService
+
+    IAppLogger ()-- SerilogAppLogger
+    AppLoggingConfigurator ..> SerilogAppLogger
+    IAppLogger ().. MainViewModel
+    IAppLogger ().. MarketSnapshotService
+    IAppLogger ().. JapaneseCandleService
+```
+
+#### 4.9.4 シーケンス図
+本図は、アプリ起動時のロガー初期化と各機能からのログ呼び出しの流れを表す。
+```mermaid
+sequenceDiagram
+    participant App as App.xaml.cs
+    participant Config as AppLoggingConfigurator
+    participant Logger as IAppLogger
+    participant Feature as MainViewModel / FeatureService
+
+    App->>Config: Configure()
+    Config-->>App: Serilog初期化
+    Feature->>Logger: Info(message)
+    alt 例外発生
+        Feature->>Logger: LogError(exception, message)
+    end
+```
 
 ---
 
@@ -332,18 +744,111 @@ flowchart LR
 - セクター比較は右ペインで最大 3 銘柄を表示する。
 - 補助ペインを閉じた場合も、テクニカル分析に必要なチャート、指標切替、下段パネル操作は左ペインだけで完結すること。
 
+### 5.3 MainWindow クラス図
+本図は、MainWindow を構成する画面要素と ViewModel の関連を表す。
+```mermaid
+classDiagram
+    class MainWindow {
+        +DataContext
+        +OnLoaded()
+        +OnSourceInitialized()
+    }
+    class MainViewModel
+    class InputArea
+    class AnalysisPane
+    class SidebarPane
+    class StatusBarArea
+
+    MainWindow *-- "1" InputArea
+    MainWindow *-- "1" AnalysisPane
+    MainWindow *-- "1" SidebarPane
+    MainWindow *-- "1" StatusBarArea
+    IMainWindowViewModel ().. MainWindow
+    IMainWindowViewModel ()-- MainViewModel
+```
+
+### 5.4 MainWindow シーケンス図
+本図は、ウィンドウ起動から初期化、表示操作までの画面側処理シーケンスを表す。
+```mermaid
+sequenceDiagram
+    participant User as 利用者
+    participant Window as MainWindow
+    participant VM as IMainWindowViewModel
+
+    User->>Window: ウィンドウを開く
+    Window->>Window: OnSourceInitialized()
+    Window->>Window: WindowStartupPlacementService.Apply(...)
+    Window->>Window: OnLoaded()
+    Window-)VM: InitializeAsync()
+    VM-->>Window: 初期表示状態
+    User->>Window: 表示ボタン押下
+    Window-)VM: LoadAnalysisAsync()
+    VM-->>Window: 表示プロパティ更新
+```
+
 ---
 
 ## 6. Composition 設計
 
 ### 6.1 AppBootstrapper
-- logger, httpService, cache, tokyoListedSymbolResolver, marketSymbolResolver を生成する。
-- MarketSnapshotService、PriceHistoryFeatureService、JapaneseStockChartFeatureService を組み立てる。
-- MainViewModel を生成して MainWindow へ渡す。
+- ServiceCollection を構成し、共通基盤、Feature サービス、画面サービスを登録する。
+- 市場区分ポリシーは設定ファイル読込結果から factory 登録で生成する。
+- MainWindow と MainViewModel は DI コンテナから解決する。
 
 ### 6.2 App.xaml.cs
 - 起動時に AppLoggingConfigurator を実行する。
 - AppBootstrapper から MainWindow を生成して表示する。
+
+### 6.3 Composition クラス図
+本図は、起動構成を担う Composition 層の主要クラス間の関連を表す。
+```mermaid
+classDiagram
+    class App {
+        +OnStartup(e)
+        +OnExit(e)
+    }
+    class AppBootstrapper {
+        +CreateMainWindow()
+        +CreateMainViewModel()
+    }
+    class ServiceCollection
+    class ServiceProvider
+    class AppLifecycleService {
+        +Start(createMainWindow)
+        +Stop(mainWindow)
+    }
+    class MainWindow
+    class MainViewModel
+
+    App ..> AppBootstrapper
+    App ..> AppLifecycleService
+    AppBootstrapper ..> ServiceCollection
+    ServiceCollection ..> ServiceProvider
+    ServiceProvider ..> MainWindow
+    ServiceProvider ..> MainViewModel
+```
+
+### 6.4 Composition シーケンス図
+本図は、アプリ起動時に DI コンテナを構築して MainWindow を解決・表示する処理シーケンスを表す。
+```mermaid
+sequenceDiagram
+    participant App as App.xaml.cs
+    participant LogConfig as AppLoggingConfigurator
+    participant Bootstrapper as AppBootstrapper
+    participant Provider as ServiceProvider
+    participant Lifecycle as AppLifecycleService
+    participant Window as MainWindow
+
+    App->>LogConfig: Configure()
+    App->>Lifecycle: Start(AppBootstrapper.CreateMainWindow)
+    Lifecycle->>Bootstrapper: CreateMainWindow()
+    Bootstrapper->>Bootstrapper: ServiceCollection を構成
+    Bootstrapper->>Provider: BuildServiceProvider()
+    Provider->>Window: Resolve MainWindow
+    Window-->>Lifecycle: MainWindow
+    Lifecycle->>Window: Show()
+    Window-->>App: 起動完了
+```
 
 ---
 
@@ -354,7 +859,7 @@ flowchart LR
 | --- | --- |
 | FR-01 | MarketSymbolResolver, TokyoListedSymbolResolver |
 | FR-02 | MarketSnapshotService |
-| FR-03, FR-04, FR-09 | Features/Dashboard/ViewModels/MainViewModel |
+| FR-03, FR-09 | Features/Dashboard/ViewModels/MainViewModel, Features/Dashboard/Services/ChartIndicatorSelectionService |
 | FR-05, FR-06 | SqlitePriceHistoryRepository, PriceHistoryFeatureService |
 | FR-07, FR-08 | JapaneseCandleService, JapaneseStockChartFeatureService |
 
@@ -364,7 +869,6 @@ flowchart LR
 - Yahoo Finance JSON の現在値解析
 - Stooq CSV の現在値解析
 - 手動更新時の画面反映
-- 自動更新間隔の下限補正
 - 履歴保存とバー生成
 - 旧 DB スキーマの移行
 - ローソク足の期間切替と色指定
@@ -384,8 +888,8 @@ flowchart LR
 | --- | --- |
 | FR-01 | Shared/MarketData/MarketSymbolResolver, Shared/MarketData/TokyoListedSymbolResolver |
 | FR-02 | Features/MarketSnapshot/Services/MarketSnapshotService |
-| FR-03 | Features/Dashboard/ViewModels/MainViewModel.RefreshAsync |
-| FR-04 | Features/Dashboard/ViewModels/MainViewModel.ToggleAutoUpdate |
+| FR-03 | Features/Dashboard/ViewModels/MainViewModel.LoadAnalysisAsync |
+| FR-04 | 廃止済み機能のため実装なし |
 | FR-05 | Features/PriceHistory/Services/SqlitePriceHistoryRepository.SaveAsync |
 | FR-06 | Features/PriceHistory/Services/PriceHistoryFeatureService.RecordAndLoadAsync |
 | FR-07 | Features/JapaneseStockChart/Services/JapaneseCandleService |

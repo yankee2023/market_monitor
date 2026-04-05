@@ -8,6 +8,7 @@
 | Package | Version | License |
 | --- | --- | --- |
 | ExcelDataReader | 3.8.0 | MIT |
+| Microsoft.Extensions.DependencyInjection | 10.0.0 | MIT |
 | Microsoft.Data.Sqlite | 9.0.0 | MIT |
 | Serilog | 4.2.0 | Apache-2.0 |
 | Serilog.Sinks.File | 6.0.0 | Apache-2.0 |

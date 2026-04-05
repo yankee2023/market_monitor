@@ -45,7 +45,7 @@ public sealed class XamlResourceRegressionTest
     {
         var workArea = new Rect(0, 0, 1200, 800);
 
-        var bounds = MainWindow.CalculateStartupBounds(workArea, 1400, 900);
+        var bounds = WindowStartupPlacementService.CalculateStartupBounds(workArea, 1400, 900);
 
         Assert.Equal(1200, bounds.Width);
         Assert.Equal(800, bounds.Height);

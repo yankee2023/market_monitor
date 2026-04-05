@@ -67,7 +67,7 @@ public sealed class JapaneseCandleService : IJapaneseCandleService
                 return yahooResult;
             }
         }
-        catch (InvalidOperationException ex) when (IsRateLimitException(ex))
+        catch (InvalidOperationException ex) when (ApiErrorClassifier.IsRateLimitException(ex))
         {
             _logger?.Info($"CandlesPrimarySourceRateLimited: Symbol={normalizedSymbol}, Timeframe={timeframe}, Source=YahooFinance, Fallback=Stooq, Message={ex.Message}");
         }

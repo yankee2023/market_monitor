@@ -1,11 +1,11 @@
 using System.Collections.ObjectModel;
 using System.ComponentModel;
 using System.Globalization;
-using System.Net;
 using System.Net.Http;
 using System.Windows.Input;
 using MarketMonitor.Composition;
 using MarketMonitor.Features.Dashboard.Models;
+using MarketMonitor.Features.Dashboard.Services;
 using MarketMonitor.Features.JapaneseStockChart.Models;
 using MarketMonitor.Features.JapaneseStockChart.Services;
 using MarketMonitor.Features.MarketSnapshot.Services;
@@ -32,6 +32,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     private readonly IPriceHistoryFeatureService _priceHistoryFeatureService;
     private readonly IJapaneseStockChartFeatureService _japaneseStockChartFeatureService;
     private readonly ISectorComparisonFeatureService _sectorComparisonFeatureService;
+    private readonly IChartIndicatorSelectionService _chartIndicatorSelectionService;
     private readonly IAppLogger _logger;
     private readonly IDesktopNotificationService _desktopNotificationService;
 
@@ -67,12 +68,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
         IJapaneseStockChartFeatureService japaneseStockChartFeatureService,
         ISectorComparisonFeatureService sectorComparisonFeatureService,
         IAppLogger logger,
-        IDesktopNotificationService desktopNotificationService)
+        IDesktopNotificationService desktopNotificationService,
+        IChartIndicatorSelectionService? chartIndicatorSelectionService = null)
     {
         _marketSnapshotService = marketSnapshotService ?? throw new ArgumentNullException(nameof(marketSnapshotService));
         _priceHistoryFeatureService = priceHistoryFeatureService ?? throw new ArgumentNullException(nameof(priceHistoryFeatureService));
         _japaneseStockChartFeatureService = japaneseStockChartFeatureService ?? throw new ArgumentNullException(nameof(japaneseStockChartFeatureService));
         _sectorComparisonFeatureService = sectorComparisonFeatureService ?? throw new ArgumentNullException(nameof(sectorComparisonFeatureService));
+        _chartIndicatorSelectionService = chartIndicatorSelectionService ?? new ChartIndicatorSelectionService();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _desktopNotificationService = desktopNotificationService ?? throw new ArgumentNullException(nameof(desktopNotificationService));
 
@@ -495,20 +498,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
 
     private static string CreateFailureMessage(Exception exception)
     {
-        ArgumentNullException.ThrowIfNull(exception);
-
-        if (exception is HttpRequestException { StatusCode: HttpStatusCode.TooManyRequests })
-        {
-            return ApiErrorMessages.RateLimitMessage;
-        }
-
-        if (exception is InvalidOperationException invalidOperationException
-            && invalidOperationException.Message.StartsWith(ApiErrorMessages.RateLimitMessage, StringComparison.Ordinal))
-        {
-            return ApiErrorMessages.RateLimitMessage;
-        }
-
-        return exception.Message;
+        return ApiErrorClassifier.CreateUserMessage(exception);
     }
 
     private void StartAnalysisLoad()
@@ -593,30 +583,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     {
         ArgumentNullException.ThrowIfNull(indicatorDefinitions);
 
-        var previousSelections = JapaneseChartIndicatorOptions.ToDictionary(
-            item => item.IndicatorKey,
-            item => item.IsSelected,
-            StringComparer.Ordinal);
-
         DetachChartIndicatorOptionHandlers();
-        JapaneseChartIndicatorOptions.Clear();
+        ReplaceCollection(
+            JapaneseChartIndicatorOptions,
+            _chartIndicatorSelectionService.CreateToggleItems(
+                JapaneseChartIndicatorOptions.ToList(),
+                indicatorDefinitions));
 
-        foreach (var definition in indicatorDefinitions.OrderBy(item => item.DisplayOrder))
+        foreach (var toggleItem in JapaneseChartIndicatorOptions)
         {
-            var isSelected = previousSelections.TryGetValue(definition.IndicatorKey, out var previous)
-                ? previous
-                : definition.IsEnabledByDefault;
-
-            var toggleItem = new ChartIndicatorToggleItem(
-                definition.IndicatorKey,
-                definition.DisplayName,
-                definition.AccentColor,
-                definition.Placement,
-                definition.DisplayOrder,
-                isSelected);
-
             toggleItem.PropertyChanged += OnChartIndicatorToggleItemPropertyChanged;
-            JapaneseChartIndicatorOptions.Add(toggleItem);
         }
     }
 
@@ -630,24 +606,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
 
     private void RefreshVisibleJapaneseChartIndicators()
     {
-        var selectedIndicatorKeys = JapaneseChartIndicatorOptions
-            .Where(item => item.IsSelected)
-            .Select(item => item.IndicatorKey)
-            .ToHashSet(StringComparer.Ordinal);
+        var selection = _chartIndicatorSelectionService.CreateSelection(
+            JapaneseChartIndicatorOptions.ToList(),
+            _allJapaneseOverlayIndicatorSeries,
+            _allJapaneseIndicatorPanels,
+            VisibleJapaneseIndicatorPanels.ToList());
 
-        var overlaySeries = _allJapaneseOverlayIndicatorSeries
-            .Where(item => selectedIndicatorKeys.Contains(item.IndicatorKey))
-            .OrderBy(item => item.DisplayOrder)
-            .ThenBy(item => item.LegendLabel, StringComparer.CurrentCulture)
-            .ToList();
-
-        var indicatorPanels = _allJapaneseIndicatorPanels
-            .Where(item => selectedIndicatorKeys.Contains(item.PanelKey))
-            .OrderBy(item => item.DisplayOrder)
-            .ToList();
-
-        ReplaceCollection(VisibleJapaneseOverlayIndicators, overlaySeries);
-        ReplaceCollection(VisibleJapaneseIndicatorPanels, indicatorPanels);
+        ReplaceCollection(VisibleJapaneseOverlayIndicators, selection.VisibleOverlaySeries);
+        ReplaceCollection(VisibleJapaneseIndicatorPanels, selection.VisibleIndicatorPanels);
         OnPropertyChanged(nameof(HasVisibleJapaneseChartIndicators));
         OnPropertyChanged(nameof(HasVisibleJapaneseIndicatorPanels));
     }
