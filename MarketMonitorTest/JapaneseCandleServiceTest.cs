@@ -82,7 +82,7 @@ public class JapaneseCandleServiceTest
 
     private static JapaneseCandleService CreateService(FakeHttpService httpService, MarketDataCache? cache = null)
     {
-        var resolver = new MarketSymbolResolver(new FakeTokyoPrimeResolver(), new FakeLogger());
+        var resolver = new MarketSymbolResolver(new FakeTokyoListedResolver(), new FakeLogger());
         return new JapaneseCandleService(new FakeLogger(), httpService, cache ?? new MarketDataCache(), resolver);
     }
 
@@ -159,7 +159,7 @@ public class JapaneseCandleServiceTest
         }
     }
 
-    private sealed class FakeTokyoPrimeResolver : ITokyoPrimeSymbolResolver
+    private sealed class FakeTokyoListedResolver : ITokyoListedSymbolResolver
     {
         public Task<string?> ResolveAsync(string input, CancellationToken cancellationToken)
         {
@@ -178,6 +178,21 @@ public class JapaneseCandleServiceTest
                 "7203.T" => "トヨタ自動車",
                 _ => null
             });
+        }
+
+        public Task<string?> ResolveSectorNameAsync(string input, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<string?>("輸送用機器");
+        }
+
+        public Task<TokyoMarketSegment> ResolveMarketSegmentAsync(string input, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(TokyoMarketSegment.Prime);
+        }
+
+        public Task<IReadOnlyList<TokyoListedSectorPeer>> GetSectorPeersAsync(string input, int maxCount, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<TokyoListedSectorPeer>>(Array.Empty<TokyoListedSectorPeer>());
         }
     }
 

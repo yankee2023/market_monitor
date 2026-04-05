@@ -4,13 +4,15 @@ using System.Globalization;
 using System.Net;
 using System.Net.Http;
 using System.Windows.Input;
+using MarketMonitor.Composition;
 using MarketMonitor.Features.Dashboard.Models;
 using MarketMonitor.Features.JapaneseStockChart.Models;
 using MarketMonitor.Features.JapaneseStockChart.Services;
 using MarketMonitor.Features.MarketSnapshot.Services;
 using MarketMonitor.Features.PriceHistory.Models;
 using MarketMonitor.Features.PriceHistory.Services;
-using MarketMonitor.Composition;
+using MarketMonitor.Features.SectorComparison.Models;
+using MarketMonitor.Features.SectorComparison.Services;
 using MarketMonitor.Shared.Infrastructure;
 using MarketMonitor.Shared.Logging;
 using MarketMonitor.Shared.MarketData;
@@ -23,29 +25,35 @@ namespace MarketMonitor.Features.Dashboard.ViewModels;
 /// </summary>
 public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowViewModel
 {
-    private const int MinimumAutoUpdateIntervalSeconds = 10;
     private const int HistoryItemLimit = 20;
     private const int CandleFetchLimit = 320;
 
     private readonly IMarketSnapshotService _marketSnapshotService;
     private readonly IPriceHistoryFeatureService _priceHistoryFeatureService;
     private readonly IJapaneseStockChartFeatureService _japaneseStockChartFeatureService;
+    private readonly ISectorComparisonFeatureService _sectorComparisonFeatureService;
     private readonly IAppLogger _logger;
-    private readonly IUiDispatcherTimer _timer;
+    private readonly IDesktopNotificationService _desktopNotificationService;
 
     private string _symbol = "7203";
-    private int _autoUpdateIntervalSeconds = 60;
-    private bool _isAutoUpdateEnabled;
     private decimal _stockPrice;
     private DateTimeOffset _stockUpdatedAt;
     private decimal _candleChartMinPrice;
     private decimal _candleChartMaxPrice;
     private double _japaneseCandlestickCanvasWidth = 320d;
-    private readonly List<ChartIndicatorRenderSeries> _allJapaneseChartIndicatorSeries = [];
+    private readonly List<ChartIndicatorRenderSeries> _allJapaneseOverlayIndicatorSeries = [];
+    private readonly List<IndicatorPanelRenderData> _allJapaneseIndicatorPanels = [];
     private readonly string _japaneseCandlestickYAxisTitle = "株価 (円)";
     private readonly string _japaneseCandlestickXAxisTitle = "日付";
     private string _companyName = string.Empty;
+    private string _sectorName = "-";
+    private string _marketSegmentName = "-";
     private string _statusMessage = "準備完了";
+    private string _alertThresholdText = string.Empty;
+    private bool _isPriceAlertEnabled;
+    private bool _isSidebarCollapsed;
+    private bool _hasPriceAlertBaseline;
+    private bool _wasAlertAtOrAboveThreshold;
     private CandleTimeframe _selectedCandleTimeframe = CandleTimeframe.Daily;
     private CandleDisplayPeriod _selectedCandleDisplayPeriod = CandleDisplayPeriod.OneMonth;
     private string _currentSnapshotSymbol = "7203.T";
@@ -57,26 +65,27 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
         IMarketSnapshotService marketSnapshotService,
         IPriceHistoryFeatureService priceHistoryFeatureService,
         IJapaneseStockChartFeatureService japaneseStockChartFeatureService,
+        ISectorComparisonFeatureService sectorComparisonFeatureService,
         IAppLogger logger,
-        IUiDispatcherTimer timer)
+        IDesktopNotificationService desktopNotificationService)
     {
         _marketSnapshotService = marketSnapshotService ?? throw new ArgumentNullException(nameof(marketSnapshotService));
         _priceHistoryFeatureService = priceHistoryFeatureService ?? throw new ArgumentNullException(nameof(priceHistoryFeatureService));
         _japaneseStockChartFeatureService = japaneseStockChartFeatureService ?? throw new ArgumentNullException(nameof(japaneseStockChartFeatureService));
+        _sectorComparisonFeatureService = sectorComparisonFeatureService ?? throw new ArgumentNullException(nameof(sectorComparisonFeatureService));
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
-        _timer = timer ?? throw new ArgumentNullException(nameof(timer));
-
-        _timer.Tick += OnTimerTick;
-        UpdateTimerInterval();
+        _desktopNotificationService = desktopNotificationService ?? throw new ArgumentNullException(nameof(desktopNotificationService));
 
         PriceHistoryItems = new ObservableCollection<PriceHistoryEntry>();
         StockPriceChartBars = new ObservableCollection<PriceHistoryBar>();
         JapaneseCandlesticks = new ObservableCollection<CandlestickRenderItem>();
         JapaneseChartIndicatorOptions = new ObservableCollection<ChartIndicatorToggleItem>();
-        VisibleJapaneseChartIndicators = new ObservableCollection<ChartIndicatorRenderSeries>();
+        VisibleJapaneseOverlayIndicators = new ObservableCollection<ChartIndicatorRenderSeries>();
+        VisibleJapaneseIndicatorPanels = new ObservableCollection<IndicatorPanelRenderData>();
+        SectorComparisonItems = new ObservableCollection<SectorComparisonPeerItem>();
 
-        RefreshCommand = new AsyncRelayCommand(RefreshAsync);
-        ToggleAutoUpdateCommand = new RelayCommand(ToggleAutoUpdate);
+        ApplySymbolCommand = new AsyncRelayCommand(LoadAnalysisAsync);
+        ToggleSidebarCommand = new RelayCommand(ToggleSidebar);
         ShowDailyCandlesCommand = new AsyncRelayCommand(() => ChangeCandlesAsync(CandleTimeframe.Daily));
         ShowWeeklyCandlesCommand = new AsyncRelayCommand(() => ChangeCandlesAsync(CandleTimeframe.Weekly));
         ShowOneMonthCandlesCommand = new AsyncRelayCommand(() => ChangeCandlePeriodAsync(CandleDisplayPeriod.OneMonth));
@@ -95,52 +104,16 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     }
 
     /// <summary>
-    /// 自動更新間隔（秒）。
-    /// </summary>
-    public int AutoUpdateIntervalSeconds
-    {
-        get => _autoUpdateIntervalSeconds;
-        set
-        {
-            var normalized = value < MinimumAutoUpdateIntervalSeconds ? MinimumAutoUpdateIntervalSeconds : value;
-            if (SetProperty(ref _autoUpdateIntervalSeconds, normalized))
-            {
-                UpdateTimerInterval();
-            }
-        }
-    }
-
-    /// <summary>
-    /// 自動更新の有効/無効。
-    /// </summary>
-    public bool IsAutoUpdateEnabled
-    {
-        get => _isAutoUpdateEnabled;
-        private set
-        {
-            if (SetProperty(ref _isAutoUpdateEnabled, value))
-            {
-                OnPropertyChanged(nameof(AutoUpdateStateDisplay));
-            }
-        }
-    }
-
-    /// <summary>
-    /// 自動更新状態の表示文字列。
-    /// </summary>
-    public string AutoUpdateStateDisplay => IsAutoUpdateEnabled ? "自動更新: オン" : "自動更新: オフ";
-
-    /// <summary>
     /// 画面表示用の株価。
     /// </summary>
     public string StockPriceDisplay => _stockPrice <= 0 ? "-" : _stockPrice.ToString("N2", CultureInfo.CurrentCulture);
 
     /// <summary>
-    /// 株価の最終更新時刻表示。
+    /// 株価の最終取得時刻表示。
     /// </summary>
     public string StockUpdatedAtDisplay => _stockUpdatedAt == default
-        ? "株価更新: 未取得"
-        : $"株価更新: {_stockUpdatedAt.LocalDateTime:yyyy/MM/dd HH:mm:ss}";
+        ? "株価取得: 未実行"
+        : $"株価取得: {_stockUpdatedAt.LocalDateTime:yyyy/MM/dd HH:mm:ss}";
 
     /// <summary>
     /// 画面表示用の銘柄名。
@@ -148,6 +121,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     public string CompanyDisplay => string.IsNullOrWhiteSpace(_companyName)
         ? $"銘柄: {_currentSnapshotSymbol}"
         : $"銘柄: {_companyName} ({_currentSnapshotSymbol})";
+
+    /// <summary>
+    /// 表示用セクター名。
+    /// </summary>
+    public string SectorDisplay => string.IsNullOrWhiteSpace(_sectorName) || _sectorName == "-"
+        ? "業種: -"
+        : $"業種: {_sectorName}";
+
+    /// <summary>
+    /// 表示用市場区分名。
+    /// </summary>
+    public string MarketSegmentDisplay => string.IsNullOrWhiteSpace(_marketSegmentName) || _marketSegmentName == "-"
+        ? "市場: -"
+        : $"市場: {_marketSegmentName}";
 
     /// <summary>
     /// ローソク足縦軸タイトル。
@@ -173,6 +160,58 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     /// ローソク足縦軸の最大値ラベル。
     /// </summary>
     public string JapaneseCandlestickMaxPriceLabel => FormatAxisLabel(_candleChartMaxPrice);
+
+    /// <summary>
+    /// 通知閾値入力。
+    /// </summary>
+    public string AlertThresholdText
+    {
+        get => _alertThresholdText;
+        set => SetProperty(ref _alertThresholdText, value);
+    }
+
+    /// <summary>
+    /// 通知有効状態。
+    /// </summary>
+    public bool IsPriceAlertEnabled
+    {
+        get => _isPriceAlertEnabled;
+        set
+        {
+            if (SetProperty(ref _isPriceAlertEnabled, value) && !value)
+            {
+                _hasPriceAlertBaseline = false;
+            }
+        }
+    }
+
+    /// <summary>
+    /// 補助ペイン折りたたみ状態。
+    /// </summary>
+    public bool IsSidebarCollapsed
+    {
+        get => _isSidebarCollapsed;
+        set
+        {
+            if (!SetProperty(ref _isSidebarCollapsed, value))
+            {
+                return;
+            }
+
+            OnPropertyChanged(nameof(IsSidebarVisible));
+            OnPropertyChanged(nameof(SidebarToggleText));
+        }
+    }
+
+    /// <summary>
+    /// 補助ペイン表示状態。
+    /// </summary>
+    public bool IsSidebarVisible => !IsSidebarCollapsed;
+
+    /// <summary>
+    /// 補助ペイン開閉ボタン表示文言。
+    /// </summary>
+    public string SidebarToggleText => IsSidebarCollapsed ? "補助ペインを開く" : "補助ペインを閉じる";
 
     /// <summary>
     /// ローソク足チャート描画領域の横幅。
@@ -213,14 +252,34 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     public ObservableCollection<ChartIndicatorToggleItem> JapaneseChartIndicatorOptions { get; }
 
     /// <summary>
-    /// 現在表示中のチャート指標描画データ。
+    /// 現在表示中の価格チャート重ね描き指標。
     /// </summary>
-    public ObservableCollection<ChartIndicatorRenderSeries> VisibleJapaneseChartIndicators { get; }
+    public ObservableCollection<ChartIndicatorRenderSeries> VisibleJapaneseOverlayIndicators { get; }
 
     /// <summary>
     /// 現在表示中のオーバーレイ指標が存在するかどうか。
     /// </summary>
-    public bool HasVisibleJapaneseChartIndicators => VisibleJapaneseChartIndicators.Count > 0;
+    public bool HasVisibleJapaneseChartIndicators => VisibleJapaneseOverlayIndicators.Count > 0;
+
+    /// <summary>
+    /// 現在表示中の下段指標パネル。
+    /// </summary>
+    public ObservableCollection<IndicatorPanelRenderData> VisibleJapaneseIndicatorPanels { get; }
+
+    /// <summary>
+    /// 下段指標パネル表示有無。
+    /// </summary>
+    public bool HasVisibleJapaneseIndicatorPanels => VisibleJapaneseIndicatorPanels.Count > 0;
+
+    /// <summary>
+    /// 同業比較一覧。
+    /// </summary>
+    public ObservableCollection<SectorComparisonPeerItem> SectorComparisonItems { get; }
+
+    /// <summary>
+    /// 同業比較表示有無。
+    /// </summary>
+    public bool HasSectorComparisonItems => SectorComparisonItems.Count > 0;
 
     /// <summary>
     /// 選択中の足種別。
@@ -271,14 +330,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     public bool IsOneYearSelected => SelectedCandleDisplayPeriod == CandleDisplayPeriod.OneYear;
 
     /// <summary>
-    /// 手動更新コマンド。
+    /// 銘柄適用コマンド。
     /// </summary>
-    public ICommand RefreshCommand { get; }
+    public ICommand ApplySymbolCommand { get; }
 
     /// <summary>
-    /// 自動更新切替コマンド。
+    /// 補助ペイン開閉コマンド。
     /// </summary>
-    public ICommand ToggleAutoUpdateCommand { get; }
+    public ICommand ToggleSidebarCommand { get; }
 
     /// <summary>
     /// 日足表示コマンド。
@@ -315,34 +374,51 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     /// </summary>
     public async Task InitializeAsync()
     {
-        _logger.Info("初期表示時のデータ取得を開始します。");
-        await RefreshAsync();
+        _logger.Info("初期表示時の分析読込を開始します。");
+        await LoadAnalysisAsync();
     }
 
-    private async void OnTimerTick(object? sender, EventArgs e)
-    {
-        await RefreshAsync();
-    }
-
-    private async Task RefreshAsync()
+    private async Task LoadAnalysisAsync()
     {
         try
         {
-            StartRefresh();
-            var snapshot = await _marketSnapshotService.GetMarketSnapshotAsync(Symbol, CancellationToken.None);
-            ApplySnapshot(snapshot);
-            await LoadPriceHistoryAsync(snapshot);
-            await LoadJapaneseStockChartAsync(snapshot.Symbol);
-            CompleteRefresh(snapshot);
+            StartAnalysisLoad();
+            var snapshot = await LoadSnapshotAsync();
+            await RefreshAnalysisWorkspaceAsync(snapshot);
+            CompleteAnalysisLoad(snapshot);
         }
         catch (HttpRequestException ex)
         {
-            HandleRefreshFailure(ex);
+            HandleAnalysisFailure(ex);
         }
         catch (InvalidOperationException ex)
         {
-            HandleRefreshFailure(ex);
+            HandleAnalysisFailure(ex);
         }
+    }
+
+    private async Task<MarketSnapshotModel> LoadSnapshotAsync()
+    {
+        var snapshot = await _marketSnapshotService.GetMarketSnapshotAsync(Symbol, CancellationToken.None);
+        ApplySnapshot(snapshot);
+        EvaluatePriceAlert(snapshot);
+        return snapshot;
+    }
+
+    private async Task RefreshAnalysisWorkspaceAsync(MarketSnapshotModel snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        await LoadPriceHistoryAsync(snapshot);
+        await RefreshTechnicalAnalysisAsync(snapshot.Symbol);
+        await LoadSectorComparisonAsync(snapshot.Symbol);
+    }
+
+    private async Task RefreshTechnicalAnalysisAsync(string symbol)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(symbol);
+
+        await LoadJapaneseStockChartAsync(symbol);
     }
 
     private async Task ChangeCandlesAsync(CandleTimeframe timeframe)
@@ -380,6 +456,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
         _stockUpdatedAt = snapshot.StockUpdatedAt;
 
         OnPropertyChanged(nameof(CompanyDisplay));
+        OnPropertyChanged(nameof(SectorDisplay));
+        OnPropertyChanged(nameof(MarketSegmentDisplay));
         OnPropertyChanged(nameof(StockPriceDisplay));
         OnPropertyChanged(nameof(StockUpdatedAtDisplay));
     }
@@ -404,22 +482,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
         UpdateCandlestickAxis(chartViewData);
     }
 
-    private void ToggleAutoUpdate()
+    private async Task LoadSectorComparisonAsync(string symbol)
     {
-        if (IsAutoUpdateEnabled)
-        {
-            SetAutoUpdate(false);
-            return;
-        }
-
-        UpdateTimerInterval();
-        SetAutoUpdate(true);
-    }
-
-    private void UpdateTimerInterval()
-    {
-        _timer.Interval = TimeSpan.FromSeconds(AutoUpdateIntervalSeconds);
-        _logger.Info($"自動更新間隔を設定しました。Interval={AutoUpdateIntervalSeconds}s");
+        var comparison = await _sectorComparisonFeatureService.LoadAsync(symbol, CancellationToken.None);
+        _sectorName = comparison.SectorName;
+        _marketSegmentName = comparison.MarketSegmentDisplay;
+        ReplaceCollection(SectorComparisonItems, comparison.Peers);
+        OnPropertyChanged(nameof(SectorDisplay));
+        OnPropertyChanged(nameof(MarketSegmentDisplay));
+        OnPropertyChanged(nameof(HasSectorComparisonItems));
     }
 
     private static string CreateFailureMessage(Exception exception)
@@ -440,26 +511,42 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
         return exception.Message;
     }
 
-    private void StartRefresh()
+    private void StartAnalysisLoad()
     {
-        _logger.Info($"手動/自動更新を開始します。Symbol={Symbol}, Interval={AutoUpdateIntervalSeconds}s");
-        StatusMessage = "データ取得中...";
+        _logger.Info($"分析データ読込を開始します。Symbol={Symbol}");
+        ResetSidebarAnalysisState();
+        StatusMessage = "分析データ取得中...";
     }
 
-    private void CompleteRefresh(MarketSnapshotModel snapshot)
+    private void CompleteAnalysisLoad(MarketSnapshotModel snapshot)
     {
         ArgumentNullException.ThrowIfNull(snapshot);
 
-        StatusMessage = $"更新完了: {snapshot.Symbol} (履歴 {PriceHistoryItems.Count} 件)";
-        _logger.Info($"更新完了。Symbol={snapshot.Symbol}, Stock={snapshot.StockPrice}");
+        StatusMessage = $"表示完了: {snapshot.Symbol} (履歴 {PriceHistoryItems.Count} 件)";
+        _logger.Info($"分析データ読込完了。Symbol={snapshot.Symbol}, Stock={snapshot.StockPrice}");
     }
 
-    private void HandleRefreshFailure(Exception exception)
+    private void ToggleSidebar()
+    {
+        IsSidebarCollapsed = !IsSidebarCollapsed;
+    }
+
+    private void HandleAnalysisFailure(Exception exception)
     {
         ArgumentNullException.ThrowIfNull(exception);
 
-        StatusMessage = $"更新失敗: {CreateFailureMessage(exception)}";
-        _logger.LogError(exception, $"更新失敗。Symbol={Symbol}");
+        StatusMessage = $"表示失敗: {CreateFailureMessage(exception)}";
+        _logger.LogError(exception, $"分析データ読込失敗。Symbol={Symbol}");
+    }
+
+    private void ResetSidebarAnalysisState()
+    {
+        _sectorName = "-";
+        _marketSegmentName = "-";
+        ReplaceCollection(SectorComparisonItems, Array.Empty<SectorComparisonPeerItem>());
+        OnPropertyChanged(nameof(SectorDisplay));
+        OnPropertyChanged(nameof(MarketSegmentDisplay));
+        OnPropertyChanged(nameof(HasSectorComparisonItems));
     }
 
     private void SetSelectedCandleTimeframe(CandleTimeframe timeframe)
@@ -491,8 +578,10 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
         _candleChartMaxPrice = chartViewData.MaxPrice;
         JapaneseCandlestickCanvasWidth = chartViewData.CanvasWidth <= 0d ? 320d : chartViewData.CanvasWidth;
         SyncChartIndicatorOptions(chartViewData.IndicatorDefinitions);
-        _allJapaneseChartIndicatorSeries.Clear();
-        _allJapaneseChartIndicatorSeries.AddRange(chartViewData.IndicatorSeries);
+        _allJapaneseOverlayIndicatorSeries.Clear();
+        _allJapaneseOverlayIndicatorSeries.AddRange(chartViewData.OverlayIndicatorSeries);
+        _allJapaneseIndicatorPanels.Clear();
+        _allJapaneseIndicatorPanels.AddRange(chartViewData.IndicatorPanels);
         RefreshVisibleJapaneseChartIndicators();
 
         OnPropertyChanged(nameof(JapaneseCandlestickMinPriceLabel));
@@ -546,15 +635,54 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
             .Select(item => item.IndicatorKey)
             .ToHashSet(StringComparer.Ordinal);
 
-        var visibleSeries = _allJapaneseChartIndicatorSeries
-            .Where(item => item.Placement == ChartIndicatorPlacement.OverlayPriceChart)
+        var overlaySeries = _allJapaneseOverlayIndicatorSeries
             .Where(item => selectedIndicatorKeys.Contains(item.IndicatorKey))
             .OrderBy(item => item.DisplayOrder)
             .ThenBy(item => item.LegendLabel, StringComparer.CurrentCulture)
             .ToList();
 
-        ReplaceCollection(VisibleJapaneseChartIndicators, visibleSeries);
+        var indicatorPanels = _allJapaneseIndicatorPanels
+            .Where(item => selectedIndicatorKeys.Contains(item.PanelKey))
+            .OrderBy(item => item.DisplayOrder)
+            .ToList();
+
+        ReplaceCollection(VisibleJapaneseOverlayIndicators, overlaySeries);
+        ReplaceCollection(VisibleJapaneseIndicatorPanels, indicatorPanels);
         OnPropertyChanged(nameof(HasVisibleJapaneseChartIndicators));
+        OnPropertyChanged(nameof(HasVisibleJapaneseIndicatorPanels));
+    }
+
+    private void EvaluatePriceAlert(MarketSnapshotModel snapshot)
+    {
+        ArgumentNullException.ThrowIfNull(snapshot);
+
+        if (!IsPriceAlertEnabled
+            || !decimal.TryParse(AlertThresholdText, NumberStyles.Float, CultureInfo.CurrentCulture, out var threshold)
+            || threshold <= 0m)
+        {
+            _hasPriceAlertBaseline = false;
+            return;
+        }
+
+        var isAtOrAboveThreshold = snapshot.StockPrice >= threshold;
+        if (!_hasPriceAlertBaseline)
+        {
+            _hasPriceAlertBaseline = true;
+            _wasAlertAtOrAboveThreshold = isAtOrAboveThreshold;
+            return;
+        }
+
+        if (isAtOrAboveThreshold == _wasAlertAtOrAboveThreshold)
+        {
+            return;
+        }
+
+        _wasAlertAtOrAboveThreshold = isAtOrAboveThreshold;
+        var direction = isAtOrAboveThreshold ? "上回りました" : "下回りました";
+        var title = $"株価通知: {snapshot.Symbol}";
+        var message = $"{snapshot.CompanyName} が通知価格 {threshold.ToString("N2", CultureInfo.CurrentCulture)} 円を{direction}。現在値: {snapshot.StockPrice.ToString("N2", CultureInfo.CurrentCulture)} 円";
+        _desktopNotificationService.ShowNotification(title, message);
+        _logger.Info($"PriceAlertTriggered: Symbol={snapshot.Symbol}, Threshold={threshold}, Price={snapshot.StockPrice}, Direction={direction}");
     }
 
     private void DetachChartIndicatorOptionHandlers()
@@ -568,23 +696,6 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     private static string FormatAxisLabel(decimal value)
     {
         return value <= 0m ? "-" : value.ToString("N2", CultureInfo.CurrentCulture);
-    }
-
-    private void SetAutoUpdate(bool isEnabled)
-    {
-        if (isEnabled)
-        {
-            _timer.Start();
-            IsAutoUpdateEnabled = true;
-            StatusMessage = "自動更新を開始しました。";
-            _logger.Info($"自動更新を開始しました。Interval={AutoUpdateIntervalSeconds}s");
-            return;
-        }
-
-        _timer.Stop();
-        IsAutoUpdateEnabled = false;
-        StatusMessage = "自動更新を停止しました。";
-        _logger.Info("自動更新を停止しました。");
     }
 
     private static void ReplaceCollection<T>(ObservableCollection<T> target, IEnumerable<T> items)
@@ -604,9 +715,12 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     /// </summary>
     public void Dispose()
     {
-        _timer.Stop();
-        _timer.Tick -= OnTimerTick;
         DetachChartIndicatorOptionHandlers();
+        if (_desktopNotificationService is IDisposable disposableNotificationService)
+        {
+            disposableNotificationService.Dispose();
+        }
+
         _logger.Info("MainViewModelを破棄しました。");
     }
 }

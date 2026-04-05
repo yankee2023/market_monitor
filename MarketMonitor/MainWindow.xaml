@@ -2,18 +2,25 @@
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
         xmlns:d="http://schemas.microsoft.com/expression/blend/2008"
+    xmlns:infra="clr-namespace:MarketMonitor.Shared.Infrastructure"
         xmlns:mc="http://schemas.openxmlformats.org/markup-compatibility/2006"
         mc:Ignorable="d"
-        Title="Market Monitor" Height="520" Width="900"
-        MinHeight="500" MinWidth="820">
+        Title="Tokyo Market Technical" Height="820" Width="1240"
+        MinHeight="700" MinWidth="960"
+        WindowStartupLocation="Manual"
+        ResizeMode="CanResizeWithGrip">
     <Window.Resources>
         <ResourceDictionary>
             <ResourceDictionary.MergedDictionaries>
                 <ResourceDictionary Source="Resources/MainWindowStyles.xaml" />
             </ResourceDictionary.MergedDictionaries>
+            <infra:BooleanToGridLengthConverter x:Key="SidebarColumnWidthConverter" TrueWidth="0" FalseWidth="2.2" FalseUnitType="Star" />
+            <infra:BooleanToGridLengthConverter x:Key="SidebarSplitterWidthConverter" TrueWidth="0" FalseWidth="6" />
+            <infra:MaximumDoubleMultiConverter x:Key="MaximumDoubleMultiConverter" />
+            <infra:DoubleDivisionConverter x:Key="DoubleDivisionConverter" />
         </ResourceDictionary>
     </Window.Resources>
-    <Grid Margin="16">
+    <Grid Margin="8">
         <Grid.RowDefinitions>
             <RowDefinition Height="Auto" />
             <RowDefinition Height="Auto" />
@@ -21,329 +28,306 @@
             <RowDefinition Height="Auto" />
         </Grid.RowDefinitions>
 
-        <Border Grid.Row="0" Padding="16" Background="#0E2A47" CornerRadius="10" Margin="0,0,0,12">
-            <StackPanel>
-                <TextBlock Text="Market Monitor" FontSize="24" FontWeight="Bold" Foreground="White" />
-                <TextBlock Text="東証プライム銘柄の現在値とチャートを監視" FontSize="13" Foreground="#D8E9FA" Margin="0,4,0,0" />
-            </StackPanel>
+        <Border Grid.Row="0" Padding="10,8" Background="#0E2A47" CornerRadius="10" Margin="0,0,0,8">
+            <DockPanel>
+                <StackPanel DockPanel.Dock="Left">
+                    <TextBlock Text="Tokyo Market Technical" FontSize="20" FontWeight="Bold" Foreground="White" />
+                    <TextBlock Text="東証プライム / スタンダード / グロース銘柄のテクニカル分析ダッシュボード" FontSize="11" Foreground="#D8E9FA" Margin="0,2,0,0" />
+                </StackPanel>
+                <TextBlock DockPanel.Dock="Right" Text="チャート中心で分析" VerticalAlignment="Center" Foreground="#D8E9FA" FontSize="11" FontWeight="SemiBold" />
+            </DockPanel>
         </Border>
 
-        <Border Grid.Row="1" Padding="12" Background="#F5F8FC" CornerRadius="10" Margin="0,0,0,12">
+        <Border Grid.Row="1" Padding="8" Background="#F5F8FC" CornerRadius="10" Margin="0,0,0,8">
             <Grid>
-                <Grid.RowDefinitions>
-                    <RowDefinition Height="Auto" />
-                    <RowDefinition Height="Auto" />
-                </Grid.RowDefinitions>
                 <Grid.ColumnDefinitions>
                     <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="220" />
-                    <ColumnDefinition Width="Auto" />
-                    <ColumnDefinition Width="120" />
+                    <ColumnDefinition Width="*" MinWidth="220" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
-                <TextBlock Grid.Row="0" Grid.ColumnSpan="6" Text="東証プライム銘柄の銘柄名・コードを入力して Enter または手動更新を押してください。"
-                           Foreground="#60788F" Margin="0,0,0,10" />
-
-                <TextBlock Grid.Row="1" Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" Text="銘柄名/コード" FontWeight="SemiBold" />
-                <TextBox Grid.Row="1" Grid.Column="1" Text="{Binding Symbol, UpdateSourceTrigger=PropertyChanged}" Padding="8,4" Margin="0,0,12,0"
+                <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" Text="銘柄名/コード" FontWeight="SemiBold" />
+                <TextBox Grid.Column="1" Text="{Binding Symbol, UpdateSourceTrigger=PropertyChanged}" Padding="8,4" Margin="0,0,10,0"
                          ToolTip="例: 7203 / トヨタ / 三菱商事">
                     <TextBox.InputBindings>
-                        <KeyBinding Key="Enter" Command="{Binding RefreshCommand}" />
+                        <KeyBinding Key="Enter" Command="{Binding ApplySymbolCommand}" />
                     </TextBox.InputBindings>
                 </TextBox>
 
-                <TextBlock Grid.Row="1" Grid.Column="2" VerticalAlignment="Center" Margin="0,0,8,0" Text="自動更新(秒)" FontWeight="SemiBold" />
-                <TextBox Grid.Row="1" Grid.Column="3" Text="{Binding AutoUpdateIntervalSeconds, UpdateSourceTrigger=PropertyChanged}" Padding="8,4" Margin="0,0,12,0"
-                         ToolTip="10秒未満を入力した場合は10秒に補正します。" />
-
-                <Button Grid.Row="1" Grid.Column="4" Content="手動更新" Command="{Binding RefreshCommand}" Padding="14,6" Margin="0,0,8,0" />
-                <Button Grid.Row="1" Grid.Column="5" Content="自動更新 ON/OFF" Command="{Binding ToggleAutoUpdateCommand}" Padding="14,6" />
+                <Button Grid.Column="2" Content="表示" Command="{Binding ApplySymbolCommand}" Padding="16,6" Margin="0,0,10,0" />
+                <TextBlock Grid.Column="3" VerticalAlignment="Center" Text="Enter でも表示" Style="{StaticResource MutedCaptionTextStyle}" />
             </Grid>
         </Border>
 
         <Grid Grid.Row="2">
             <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="5*" />
-                <ColumnDefinition Width="8" />
-                <ColumnDefinition Width="280" MinWidth="220" />
+                <ColumnDefinition Width="7*" MinWidth="0" />
+                <ColumnDefinition Width="{Binding IsSidebarCollapsed, Converter={StaticResource SidebarSplitterWidthConverter}}" />
+                <ColumnDefinition Width="{Binding IsSidebarCollapsed, Converter={StaticResource SidebarColumnWidthConverter}}" MinWidth="0" />
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Padding="16" Background="White" CornerRadius="10" BorderBrush="#DCE5F0" BorderThickness="1" Margin="0,0,8,0">
+            <Border Grid.Column="0" Padding="10" Style="{StaticResource CardBorderStyle}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" HorizontalScrollBarVisibility="Disabled" CanContentScroll="False">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="Auto" />
                         <RowDefinition Height="*" />
-                        <RowDefinition Height="Auto" />
                     </Grid.RowDefinitions>
-                    <Grid.ColumnDefinitions>
-                        <ColumnDefinition Width="Auto" />
-                        <ColumnDefinition Width="*" />
-                    </Grid.ColumnDefinitions>
 
-                    <DockPanel Margin="0,0,0,8">
-                        <TextBlock DockPanel.Dock="Left" Text="チャート" FontSize="14" FontWeight="SemiBold" Foreground="#23374D" />
+                    <DockPanel Margin="0,0,0,4">
+                        <TextBlock DockPanel.Dock="Left" Text="チャート" FontSize="13" FontWeight="SemiBold" Foreground="#23374D" />
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
+                            <Button Content="{Binding SidebarToggleText}" Command="{Binding ToggleSidebarCommand}" Style="{StaticResource ToolbarGhostButtonStyle}" />
                             <Button Content="日足" Command="{Binding ShowDailyCandlesCommand}" Style="{StaticResource DailyCandleButtonStyle}" Margin="0,0,6,0" />
                             <Button Content="週足" Command="{Binding ShowWeeklyCandlesCommand}" Style="{StaticResource WeeklyCandleButtonStyle}" />
                         </StackPanel>
                     </DockPanel>
 
-                    <Grid Grid.Row="1" Grid.ColumnSpan="2" Margin="0,0,0,10">
+                    <Grid Grid.Row="1" Margin="0,0,0,6">
                         <Grid.ColumnDefinitions>
+                            <ColumnDefinition Width="Auto" />
+                            <ColumnDefinition Width="8" />
                             <ColumnDefinition Width="*" />
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="Auto" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
-                            <TextBlock Text="表示期間" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#60788F" FontSize="12" />
-                            <Button Content="1か月" Command="{Binding ShowOneMonthCandlesCommand}" Style="{StaticResource OneMonthButtonStyle}" Margin="0,0,6,0" />
-                            <Button Content="3か月" Command="{Binding ShowThreeMonthsCandlesCommand}" Style="{StaticResource ThreeMonthsButtonStyle}" Margin="0,0,6,0" />
-                            <Button Content="6か月" Command="{Binding ShowSixMonthsCandlesCommand}" Style="{StaticResource SixMonthsButtonStyle}" Margin="0,0,6,0" />
-                            <Button Content="1年" Command="{Binding ShowOneYearCandlesCommand}" Style="{StaticResource OneYearButtonStyle}" />
+                        <StackPanel Grid.Column="0" Orientation="Vertical">
+                            <TextBlock Text="表示期間" Margin="0,0,0,4" Style="{StaticResource MutedCaptionTextStyle}" />
+                            <WrapPanel>
+                                <Button Content="1か月" Command="{Binding ShowOneMonthCandlesCommand}" Style="{StaticResource OneMonthButtonStyle}" Margin="0,0,6,6" />
+                                <Button Content="3か月" Command="{Binding ShowThreeMonthsCandlesCommand}" Style="{StaticResource ThreeMonthsButtonStyle}" Margin="0,0,6,6" />
+                                <Button Content="6か月" Command="{Binding ShowSixMonthsCandlesCommand}" Style="{StaticResource SixMonthsButtonStyle}" Margin="0,0,6,6" />
+                                <Button Content="1年" Command="{Binding ShowOneYearCandlesCommand}" Style="{StaticResource OneYearButtonStyle}" Margin="0,0,6,6" />
+                            </WrapPanel>
                         </StackPanel>
 
-                        <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center" Margin="12,0,12,0">
-                            <TextBlock Text="表示指標" VerticalAlignment="Center" Margin="0,0,8,0" Foreground="#60788F" FontSize="12" />
-                            <ItemsControl ItemsSource="{Binding JapaneseChartIndicatorOptions}">
+                        <StackPanel Grid.Column="2" Orientation="Vertical" HorizontalAlignment="Left">
+                            <TextBlock Text="表示指標" Margin="0,0,0,4" Style="{StaticResource MutedCaptionTextStyle}" />
+                            <ItemsControl ItemsSource="{Binding JapaneseChartIndicatorOptions}"
+                                          ItemTemplate="{StaticResource JapaneseChartIndicatorOptionTemplate}">
                                 <ItemsControl.ItemsPanel>
                                     <ItemsPanelTemplate>
-                                        <StackPanel Orientation="Horizontal" />
+                                        <WrapPanel />
                                     </ItemsPanelTemplate>
                                 </ItemsControl.ItemsPanel>
-                                <ItemsControl.ItemTemplate>
-                                    <DataTemplate>
-                                        <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,10,0" VerticalAlignment="Center">
-                                            <StackPanel Orientation="Horizontal">
-                                                <Rectangle Width="10" Height="2" Fill="{Binding AccentColor}" VerticalAlignment="Center" Margin="0,0,6,0" />
-                                                <TextBlock Text="{Binding DisplayName}" Foreground="#23374D" FontSize="12" VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </CheckBox>
-                                    </DataTemplate>
-                                </ItemsControl.ItemTemplate>
                             </ItemsControl>
                         </StackPanel>
-
-                        <Border Grid.Column="2" Padding="10,4" Background="#EEF4FB" CornerRadius="999" BorderBrush="#D4E0ED" BorderThickness="1">
-                            <StackPanel Orientation="Horizontal">
-                                <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
-                                    <Ellipse Width="8" Height="8" Fill="#D62828" VerticalAlignment="Center" />
-                                    <TextBlock Text="陽線" Margin="6,0,0,0" FontSize="11" Foreground="#60788F" VerticalAlignment="Center" />
-                                </StackPanel>
-                                <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
-                                    <Ellipse Width="8" Height="8" Fill="#1D4ED8" VerticalAlignment="Center" />
-                                    <TextBlock Text="陰線" Margin="6,0,0,0" FontSize="11" Foreground="#60788F" VerticalAlignment="Center" />
-                                </StackPanel>
-                                <ItemsControl ItemsSource="{Binding VisibleJapaneseChartIndicators}">
-                                    <ItemsControl.Style>
-                                        <Style TargetType="ItemsControl">
-                                            <Setter Property="Visibility" Value="Collapsed" />
-                                            <Style.Triggers>
-                                                <DataTrigger Binding="{Binding HasVisibleJapaneseChartIndicators}" Value="True">
-                                                    <Setter Property="Visibility" Value="Visible" />
-                                                </DataTrigger>
-                                            </Style.Triggers>
-                                        </Style>
-                                    </ItemsControl.Style>
-                                    <ItemsControl.ItemsPanel>
-                                        <ItemsPanelTemplate>
-                                            <StackPanel Orientation="Horizontal" />
-                                        </ItemsPanelTemplate>
-                                    </ItemsControl.ItemsPanel>
-                                    <ItemsControl.ItemTemplate>
-                                        <DataTemplate>
-                                            <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
-                                                <Canvas Width="12" Height="8" Margin="0,0,6,0">
-                                                    <Polyline Points="0,4 12,4" Stroke="{Binding StrokeColor}" StrokeThickness="{Binding StrokeThickness}"
-                                                              StrokeDashArray="{Binding StrokeDashArray}" StrokeLineJoin="Round"
-                                                              StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
-                                                </Canvas>
-                                                <TextBlock Text="{Binding LegendLabel}" FontSize="11" Foreground="#60788F" VerticalAlignment="Center" />
-                                            </StackPanel>
-                                        </DataTemplate>
-                                    </ItemsControl.ItemTemplate>
-                                </ItemsControl>
-                            </StackPanel>
-                        </Border>
                     </Grid>
 
-                    <Grid Grid.Row="2" Grid.ColumnSpan="2">
-                        <Grid.ColumnDefinitions>
-                            <ColumnDefinition Width="Auto" />
-                            <ColumnDefinition Width="*" />
-                        </Grid.ColumnDefinitions>
-
-                        <Grid Grid.Column="0" Margin="0,0,12,20">
+                    <Border Grid.Row="2" Background="#F7FAFD" CornerRadius="8" Padding="8" BorderBrush="#E2EBF4" BorderThickness="1">
+                        <Grid>
                             <Grid.RowDefinitions>
+                                <RowDefinition Height="*" MinHeight="260" />
                                 <RowDefinition Height="Auto" />
-                                <RowDefinition Height="*" />
+                                <RowDefinition Height="Auto" />
                                 <RowDefinition Height="Auto" />
                             </Grid.RowDefinitions>
 
-                            <TextBlock Grid.Row="0" Text="{Binding JapaneseCandlestickYAxisTitle}" Foreground="#60788F" FontSize="12" FontWeight="SemiBold" Margin="0,0,0,8" />
-                            <Grid Grid.Row="1">
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="Auto" />
-                                    <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
+                            <Grid Grid.Row="0">
+                                <Grid.ColumnDefinitions>
+                                    <ColumnDefinition Width="56" />
+                                    <ColumnDefinition Width="*" />
+                                </Grid.ColumnDefinitions>
 
-                                <TextBlock Grid.Row="0" Text="{Binding JapaneseCandlestickMaxPriceLabel}" FontSize="11" Foreground="#60788F" />
-                                <TextBlock Grid.Row="1" Text="{Binding JapaneseCandlestickMidPriceLabel}" FontSize="11" Foreground="#60788F" VerticalAlignment="Center" />
-                                <TextBlock Grid.Row="2" Text="{Binding JapaneseCandlestickMinPriceLabel}" FontSize="11" Foreground="#60788F" VerticalAlignment="Bottom" />
-                            </Grid>
-                        </Grid>
+                                <Grid Grid.Column="0" Margin="0,0,8,20">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="Auto" />
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
 
-                        <Border Grid.Column="1" Background="#F7FAFD" CornerRadius="8" Padding="12" BorderBrush="#E2EBF4" BorderThickness="1">
-                            <Grid>
-                                <Grid.RowDefinitions>
-                                    <RowDefinition Height="*" />
-                                    <RowDefinition Height="Auto" />
-                                </Grid.RowDefinitions>
-
-                                <Grid Grid.Row="0">
-                                    <Grid.ColumnDefinitions>
-                                        <ColumnDefinition Width="Auto" />
-                                        <ColumnDefinition Width="*" />
-                                    </Grid.ColumnDefinitions>
-
-                                    <Border Grid.Column="0" Width="1" Background="#AEBFD1" Margin="0,4,14,26" />
-
-                                    <Grid Grid.Column="1">
+                                    <TextBlock Grid.Row="0" Text="{Binding JapaneseCandlestickYAxisTitle}" Margin="0,0,0,6" Style="{StaticResource MutedCaptionTextStyle}" FontWeight="SemiBold" />
+                                    <Grid Grid.Row="1">
                                         <Grid.RowDefinitions>
+                                            <RowDefinition Height="Auto" />
                                             <RowDefinition Height="*" />
                                             <RowDefinition Height="Auto" />
                                         </Grid.RowDefinitions>
 
-                                        <Grid Grid.Row="0" IsHitTestVisible="False">
+                                        <TextBlock Grid.Row="0" Text="{Binding JapaneseCandlestickMaxPriceLabel}" FontSize="10" Foreground="#60788F" />
+                                        <TextBlock Grid.Row="1" Text="{Binding JapaneseCandlestickMidPriceLabel}" FontSize="10" Foreground="#60788F" VerticalAlignment="Center" />
+                                        <TextBlock Grid.Row="2" Text="{Binding JapaneseCandlestickMinPriceLabel}" FontSize="10" Foreground="#60788F" VerticalAlignment="Bottom" />
+                                    </Grid>
+                                </Grid>
+
+                                <Grid Grid.Column="1">
+                                    <Grid.RowDefinitions>
+                                        <RowDefinition Height="*" />
+                                        <RowDefinition Height="Auto" />
+                                    </Grid.RowDefinitions>
+
+                                    <ScrollViewer x:Name="MainChartScrollViewer"
+                                                  Grid.Row="0"
+                                                  HorizontalScrollBarVisibility="Auto"
+                                                  VerticalScrollBarVisibility="Disabled"
+                                                  infra:ScrollViewerSyncBehavior.GroupName="JapaneseChartHorizontal">
+                                        <Grid x:Name="MainCandlestickContentGrid">
+                                            <Grid.Width>
+                                                <MultiBinding Converter="{StaticResource MaximumDoubleMultiConverter}">
+                                                    <Binding Path="JapaneseCandlestickCanvasWidth" />
+                                                    <Binding ElementName="MainChartScrollViewer" Path="ActualWidth" />
+                                                </MultiBinding>
+                                            </Grid.Width>
                                             <Grid.RowDefinitions>
-                                                <RowDefinition Height="Auto" />
                                                 <RowDefinition Height="*" />
                                                 <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
 
-                                            <Border Grid.Row="0" Height="1" Background="#D7E3EF" VerticalAlignment="Top" />
-                                            <Border Grid.Row="1" Height="1" Background="#DDE7F1" VerticalAlignment="Center" />
-                                            <Border Grid.Row="2" Height="1" Background="#D7E3EF" VerticalAlignment="Bottom" />
-                                        </Grid>
+                                            <Grid x:Name="MainCandlestickPlotViewport" Grid.Row="0" ClipToBounds="True">
+                                                <Border HorizontalAlignment="Right"
+                                                        VerticalAlignment="Top"
+                                                        Margin="0,8,8,0"
+                                                        Padding="8,4"
+                                                        Background="#ECF3FB"
+                                                        BorderBrush="#D4E0ED"
+                                                        BorderThickness="1"
+                                                        CornerRadius="10"
+                                                        Panel.ZIndex="2"
+                                                        IsHitTestVisible="False">
+                                                    <WrapPanel>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
+                                                            <Ellipse Width="8" Height="8" Fill="#D62828" VerticalAlignment="Center" />
+                                                            <TextBlock Text="陽線" Margin="6,0,0,0" VerticalAlignment="Center" Style="{StaticResource MutedCaptionTextStyle}" />
+                                                        </StackPanel>
+                                                        <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
+                                                            <Ellipse Width="8" Height="8" Fill="#1D4ED8" VerticalAlignment="Center" />
+                                                            <TextBlock Text="陰線" Margin="6,0,0,0" VerticalAlignment="Center" Style="{StaticResource MutedCaptionTextStyle}" />
+                                                        </StackPanel>
+                                                        <ItemsControl ItemsSource="{Binding VisibleJapaneseOverlayIndicators}"
+                                                                      Style="{StaticResource VisibleJapaneseChartIndicatorsStyle}"
+                                                                      ItemTemplate="{StaticResource OverlayIndicatorLegendTemplate}">
+                                                            <ItemsControl.ItemsPanel>
+                                                                <ItemsPanelTemplate>
+                                                                    <StackPanel Orientation="Horizontal" />
+                                                                </ItemsPanelTemplate>
+                                                            </ItemsControl.ItemsPanel>
+                                                        </ItemsControl>
+                                                    </WrapPanel>
+                                                </Border>
 
-                                        <ScrollViewer Grid.Row="0" HorizontalScrollBarVisibility="Auto" VerticalScrollBarVisibility="Disabled">
-                                            <Grid Width="{Binding JapaneseCandlestickCanvasWidth}">
-                                                <ItemsControl ItemsSource="{Binding VisibleJapaneseChartIndicators}" Width="{Binding JapaneseCandlestickCanvasWidth}" Height="220" IsHitTestVisible="False">
-                                                    <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate>
-                                                            <Grid />
-                                                        </ItemsPanelTemplate>
-                                                    </ItemsControl.ItemsPanel>
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <Polyline Points="{Binding Points}" Stroke="{Binding StrokeColor}" StrokeThickness="{Binding StrokeThickness}"
-                                                                      StrokeDashArray="{Binding StrokeDashArray}" StrokeLineJoin="Round"
-                                                                      StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.95" />
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
+                                                <Grid x:Name="MainCandlestickScaledGrid"
+                                                      Height="260"
+                                                      Width="{Binding ElementName=MainCandlestickContentGrid, Path=ActualWidth}"
+                                                      VerticalAlignment="Top"
+                                                      RenderTransformOrigin="0.5,0">
+                                                    <Grid.RenderTransform>
+                                                        <ScaleTransform ScaleY="{Binding ElementName=MainCandlestickPlotViewport, Path=ActualHeight, Converter={StaticResource DoubleDivisionConverter}, ConverterParameter=260}" />
+                                                    </Grid.RenderTransform>
 
-                                                <ItemsControl ItemsSource="{Binding JapaneseCandlesticks}">
-                                                    <ItemsControl.ItemsPanel>
-                                                        <ItemsPanelTemplate>
-                                                            <StackPanel Orientation="Horizontal" />
-                                                        </ItemsPanelTemplate>
-                                                    </ItemsControl.ItemsPanel>
-                                                    <ItemsControl.ItemTemplate>
-                                                        <DataTemplate>
-                                                            <Border Width="34" Padding="4,4,4,0" CornerRadius="6" Background="Transparent" BorderBrush="Transparent" BorderThickness="1">
-                                                                <Border.Style>
-                                                                    <Style TargetType="Border">
-                                                                        <Setter Property="Background" Value="Transparent" />
-                                                                        <Setter Property="BorderBrush" Value="Transparent" />
-                                                                        <Style.Triggers>
-                                                                            <Trigger Property="IsMouseOver" Value="True">
-                                                                                <Setter Property="Background" Value="#EAF2FB" />
-                                                                                <Setter Property="BorderBrush" Value="#BDD1E5" />
-                                                                            </Trigger>
-                                                                        </Style.Triggers>
-                                                                    </Style>
-                                                                </Border.Style>
-                                                                <StackPanel Width="26" ToolTipService.ShowDuration="60000">
-                                                                    <StackPanel.ToolTip>
-                                                                        <ToolTip Placement="Mouse" HasDropShadow="True">
-                                                                            <StackPanel>
-                                                                                <TextBlock Text="{Binding DateText, StringFormat=日付: {0}}" FontWeight="SemiBold" Margin="0,0,0,6" />
-                                                                                <TextBlock Text="{Binding OpenText, StringFormat=始値: {0}}" />
-                                                                                <TextBlock Text="{Binding CloseText, StringFormat=終値: {0}}" />
-                                                                                <TextBlock Text="{Binding HighText, StringFormat=高値: {0}}" />
-                                                                                <TextBlock Text="{Binding LowText, StringFormat=安値: {0}}" />
-                                                                            </StackPanel>
-                                                                        </ToolTip>
-                                                                    </StackPanel.ToolTip>
-                                                                    <Canvas Width="26" Height="220">
-                                                                        <Rectangle Width="2" Height="{Binding WickHeight}" Fill="{Binding WickColor}"
-                                                                                   Canvas.Left="12" Canvas.Top="{Binding WickTop}" />
-                                                                        <Rectangle Width="12" Height="{Binding BodyHeight}" Fill="{Binding BodyColor}"
-                                                                                   Stroke="#22303C" StrokeThickness="0.7"
-                                                                                   RadiusX="1.5" RadiusY="1.5"
-                                                                                   Canvas.Left="7" Canvas.Top="{Binding BodyTop}" />
-                                                                    </Canvas>
-                                                                    <TextBlock Text="{Binding Label}" FontSize="9" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#60788F" TextAlignment="Center" Margin="0,6,0,0">
-                                                                        <TextBlock.Style>
-                                                                            <Style TargetType="TextBlock">
-                                                                                <Setter Property="Visibility" Value="Collapsed" />
-                                                                                <Style.Triggers>
-                                                                                    <DataTrigger Binding="{Binding IsLabelVisible}" Value="True">
-                                                                                        <Setter Property="Visibility" Value="Visible" />
-                                                                                    </DataTrigger>
-                                                                                </Style.Triggers>
-                                                                            </Style>
-                                                                        </TextBlock.Style>
-                                                                    </TextBlock>
-                                                                </StackPanel>
-                                                            </Border>
-                                                        </DataTemplate>
-                                                    </ItemsControl.ItemTemplate>
-                                                </ItemsControl>
+                                                    <Grid IsHitTestVisible="False">
+                                                        <Grid.RowDefinitions>
+                                                            <RowDefinition Height="Auto" />
+                                                            <RowDefinition Height="*" />
+                                                            <RowDefinition Height="Auto" />
+                                                        </Grid.RowDefinitions>
+
+                                                        <Border Grid.Row="0" Height="1" Background="#D7E3EF" VerticalAlignment="Top" />
+                                                        <Border Grid.Row="1" Height="1" Background="#DDE7F1" VerticalAlignment="Center" />
+                                                        <Border Grid.Row="2" Height="1" Background="#D7E3EF" VerticalAlignment="Bottom" />
+                                                    </Grid>
+
+                                                    <ItemsControl ItemsSource="{Binding VisibleJapaneseOverlayIndicators}" Width="{Binding ElementName=MainCandlestickScaledGrid, Path=ActualWidth}" Height="260" IsHitTestVisible="False">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <Grid />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                        <ItemsControl.ItemTemplate>
+                                                            <DataTemplate>
+                                                                <Polyline Points="{Binding Points}" Stroke="{Binding StrokeColor}" StrokeThickness="{Binding StrokeThickness}"
+                                                                          StrokeDashArray="{Binding StrokeDashArray}" StrokeLineJoin="Round"
+                                                                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.95" />
+                                                            </DataTemplate>
+                                                        </ItemsControl.ItemTemplate>
+                                                    </ItemsControl>
+
+                                                    <ItemsControl ItemsSource="{Binding JapaneseCandlesticks}"
+                                                                  ItemTemplate="{StaticResource JapaneseCandlestickTemplate}">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <StackPanel Orientation="Horizontal" />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                    </ItemsControl>
+                                                </Grid>
                                             </Grid>
-                                        </ScrollViewer>
 
-                                        <Border Grid.Row="1" Height="1" Background="#AEBFD1" Margin="0,8,0,0" />
-                                    </Grid>
+                                            <ItemsControl Grid.Row="1" ItemsSource="{Binding JapaneseCandlesticks}"
+                                                          ItemTemplate="{StaticResource JapaneseCandlestickAxisLabelTemplate}">
+                                                <ItemsControl.ItemsPanel>
+                                                    <ItemsPanelTemplate>
+                                                        <StackPanel Orientation="Horizontal" />
+                                                    </ItemsPanelTemplate>
+                                                </ItemsControl.ItemsPanel>
+                                            </ItemsControl>
+                                        </Grid>
+                                    </ScrollViewer>
+
+                                    <TextBlock Grid.Row="1" Text="{Binding JapaneseCandlestickXAxisTitle}" HorizontalAlignment="Right" Margin="0,6,4,0" Style="{StaticResource MutedCaptionTextStyle}" FontWeight="SemiBold" />
                                 </Grid>
-
-                                <TextBlock Grid.Row="1" Text="{Binding JapaneseCandlestickXAxisTitle}" Foreground="#60788F" FontSize="12" FontWeight="SemiBold" HorizontalAlignment="Right" Margin="0,12,4,0" />
                             </Grid>
-                        </Border>
-                    </Grid>
+
+                            <DockPanel Grid.Row="1" Margin="0,10,0,6">
+                                <TextBlock DockPanel.Dock="Left" Text="分析パネル" FontSize="12" FontWeight="SemiBold" Foreground="#23374D" />
+                                <TextBlock DockPanel.Dock="Right" Text="出来高 / MACD / RSI" FontSize="10" Foreground="#60788F" />
+                            </DockPanel>
+
+                            <ItemsControl Grid.Row="2"
+                                          ItemsSource="{Binding VisibleJapaneseIndicatorPanels}"
+                                          Style="{StaticResource VisibleJapaneseIndicatorPanelsStyle}"
+                                          ItemTemplate="{StaticResource IndicatorPanelTemplate}">
+                                <ItemsControl.ItemsPanel>
+                                    <ItemsPanelTemplate>
+                                        <StackPanel />
+                                    </ItemsPanelTemplate>
+                                </ItemsControl.ItemsPanel>
+                            </ItemsControl>
+
+                            <TextBlock Grid.Row="3"
+                                       Text="表示中の分析パネルがありません。"
+                                       Margin="0,4,0,0"
+                                       VerticalAlignment="Top"
+                                       Style="{StaticResource HiddenWhenIndicatorPanelsExistTextStyle}" />
+                        </Grid>
+                    </Border>
                 </Grid>
+                </ScrollViewer>
             </Border>
 
-            <GridSplitter Grid.Column="1" Width="8" HorizontalAlignment="Stretch" VerticalAlignment="Stretch" Background="Transparent" ResizeBehavior="PreviousAndNext" ResizeDirection="Columns" ShowsPreview="True" />
+            <GridSplitter Grid.Column="1" Width="6" Style="{StaticResource SidebarSplitterStyle}" />
 
-            <Border Grid.Column="2" Padding="14" Background="White" CornerRadius="10" BorderBrush="#DCE5F0" BorderThickness="1" VerticalAlignment="Top">
-                <StackPanel>
-                    <TextBox Text="{Binding CompanyDisplay, Mode=OneWay}" FontSize="13" FontWeight="SemiBold"
-                             Foreground="#60788F" IsReadOnly="True" BorderThickness="0" Background="Transparent" />
-                    <TextBlock Text="現在値" FontSize="15" FontWeight="SemiBold" Foreground="#23374D" Margin="0,8,0,0" />
-                    <TextBox Text="{Binding StockPriceDisplay, Mode=OneWay}" FontSize="32" FontWeight="Bold" Margin="0,10,0,0"
-                             Foreground="#0E2A47" IsReadOnly="True" BorderThickness="0" Background="Transparent" />
-                    <TextBox Text="{Binding StockUpdatedAtDisplay, Mode=OneWay}" FontSize="12" Foreground="#60788F" Margin="0,8,0,0"
-                             IsReadOnly="True" BorderThickness="0" Background="Transparent" />
-                </StackPanel>
+            <Border Grid.Column="2" MinWidth="300" Style="{StaticResource SidebarHostBorderStyle}">
+                <ScrollViewer VerticalScrollBarVisibility="Auto">
+                    <StackPanel>
+                        <ContentControl Content="{Binding}" ContentTemplate="{StaticResource SidebarSummaryTemplate}" />
+
+                        <Expander Header="価格通知" IsExpanded="False" Style="{StaticResource SidebarExpanderStyle}">
+                            <StackPanel Margin="10,6,10,10">
+                                <TextBlock Text="指定価格を上回る、または下回ると Windows 通知を表示します。" TextWrapping="Wrap" Margin="0,0,0,8" Style="{StaticResource MutedCaptionTextStyle}" />
+                                <TextBox Text="{Binding AlertThresholdText, UpdateSourceTrigger=PropertyChanged}" Padding="8,4" ToolTip="例: 3000" />
+                                <CheckBox IsChecked="{Binding IsPriceAlertEnabled}" Content="価格通知を有効化" Margin="0,8,0,0" Foreground="#23374D" />
+                            </StackPanel>
+                        </Expander>
+
+                        <Expander Header="同業比較" IsExpanded="True" Style="{StaticResource SidebarExpanderStyle}">
+                            <StackPanel Margin="10,6,10,10">
+                                <ItemsControl ItemsSource="{Binding SectorComparisonItems}"
+                                              Style="{StaticResource VisibleSectorComparisonItemsStyle}"
+                                              ItemTemplate="{StaticResource SectorComparisonItemTemplate}" />
+                                <TextBlock Text="同業比較データを取得できませんでした。"
+                                           Margin="0,4,0,0"
+                                           Style="{StaticResource HiddenWhenSectorComparisonExistsTextStyle}" />
+                            </StackPanel>
+                        </Expander>
+                    </StackPanel>
+                </ScrollViewer>
             </Border>
         </Grid>
 
-        <Border Grid.Row="3" Padding="10" Background="#F9FBFE" CornerRadius="8" Margin="0,12,0,0">
-            <Grid>
-                <Grid.ColumnDefinitions>
-                    <ColumnDefinition Width="*" />
-                    <ColumnDefinition Width="Auto" />
-                </Grid.ColumnDefinitions>
-                <TextBox Grid.Column="0" Text="{Binding StatusMessage, Mode=OneWay}" Foreground="#2C3E50" VerticalAlignment="Center"
-                         IsReadOnly="True" BorderThickness="0" Background="Transparent" TextWrapping="Wrap" />
-                <TextBlock Grid.Column="1" Text="{Binding IsAutoUpdateEnabled, StringFormat=自動更新: {0}}" Foreground="#2C3E50" VerticalAlignment="Center" FontWeight="SemiBold" />
-            </Grid>
+        <Border Grid.Row="3" Padding="8,6" Background="#F9FBFE" CornerRadius="8" Margin="0,8,0,0">
+            <TextBlock Text="{Binding StatusMessage, Mode=OneWay}" Foreground="#2C3E50" VerticalAlignment="Center"
+                       TextWrapping="Wrap" Style="{StaticResource ReadOnlyInfoTextStyle}" />
         </Border>
     </Grid>
 </Window>

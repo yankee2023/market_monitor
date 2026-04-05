@@ -1,13 +1,13 @@
-# Copilot Instructions for MarketMonitor
+# Copilot Instructions for Tokyo Market Technical
 
-This file contains project-specific rules for MarketMonitor.
+This file contains project-specific rules for Tokyo Market Technical.
 
 Reusable C# and WPF guidance has been moved to [.github/instructions/common-csharp-wpf.instructions.md](.github/instructions/common-csharp-wpf.instructions.md).
 
 ## 1. Scope
 - This application is Japan-stock-only.
 - Remove or reject functionality for exchange rates and non-Japanese markets unless the specification explicitly changes.
-- User-facing symbol handling must resolve to Tokyo `.T` symbols and Tokyo Prime company names only.
+- User-facing symbol handling must resolve to Tokyo `.T` symbols and company names listed on Tokyo Prime, Standard, or Growth.
 
 ## 2. Source of Truth
 - Keep [SPECIFICATION.md](SPECIFICATION.md), [DESIGN.md](DESIGN.md), and implementation aligned in the same change.
@@ -26,7 +26,7 @@ Reusable C# and WPF guidance has been moved to [.github/instructions/common-csha
 ## 4. Data Sources and Persistence
 - Use Yahoo Finance as the primary source for Japanese stock price and candle data.
 - Use Stooq only as a fallback.
-- Use JPX listed-company data for Tokyo Prime name resolution.
+- Use JPX listed-company data for Tokyo Prime, Standard, and Growth name resolution.
 - Keep SQLite history schema limited to `symbol`, `stock_price`, and `recorded_at`.
 - When dependency changes affect licensing, update [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) and the related README reference.
 
@@ -38,6 +38,7 @@ Reusable C# and WPF guidance has been moved to [.github/instructions/common-csha
 ## 6. Tests and Quality Gates
 - Prefer xUnit for tests in this repository.
 - Add tests when changing feature orchestration, fallbacks, repositories, or symbol resolution logic.
+- When changing XAML resources, templates, or merged dictionaries, add or update a regression test that loads the target ResourceDictionary or constructs the target Window on STA to catch missing StaticResource and merge-order failures.
 - Maintain or improve the enforced coverage threshold in `MarketMonitorTest`.
 - Prefer test seams such as interfaces or injected collaborators over fragile reflection-based tests when changing production code.
 

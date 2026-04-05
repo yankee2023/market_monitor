@@ -4,7 +4,7 @@ using MarketMonitor.Shared.MarketData;
 namespace MarketMonitorTest;
 
 /// <summary>
-/// MarketSymbolResolver と TokyoPrimeSymbolResolver の補助ロジックを検証するテストクラス。
+/// MarketSymbolResolver と TokyoListedSymbolResolver の補助ロジックを検証するテストクラス。
 /// </summary>
 public class MarketSymbolResolverTest
 {
@@ -47,14 +47,14 @@ public class MarketSymbolResolverTest
     }
 
     /// <summary>
-    /// 会社名の正規化キーから一意に東証プライム銘柄を解決できることをテスト。
+    /// 会社名の正規化キーから一意に東証銘柄を解決できることをテスト。
     /// 期待値: 8058.T。
     /// </summary>
     [Fact]
     public void FindSymbol_ReturnsSymbol_ForUniquePartialMatch()
     {
         // Arrange
-        var method = typeof(TokyoPrimeSymbolResolver).GetMethod(
+        var method = typeof(TokyoListedSymbolResolver).GetMethod(
             "FindSymbol",
             BindingFlags.NonPublic | BindingFlags.Static);
         var lookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
@@ -78,7 +78,7 @@ public class MarketSymbolResolverTest
     public void NormalizeCompanyName_RemovesCorporationAndSymbols()
     {
         // Arrange
-        var method = typeof(TokyoPrimeSymbolResolver).GetMethod(
+        var method = typeof(TokyoListedSymbolResolver).GetMethod(
             "NormalizeCompanyName",
             BindingFlags.NonPublic | BindingFlags.Static);
 
@@ -97,7 +97,7 @@ public class MarketSymbolResolverTest
     public void FindSymbol_ReturnsNull_WhenMultipleCandidatesExist()
     {
         // Arrange
-        var method = typeof(TokyoPrimeSymbolResolver).GetMethod(
+        var method = typeof(TokyoListedSymbolResolver).GetMethod(
             "FindSymbol",
             BindingFlags.NonPublic | BindingFlags.Static);
         var lookup = new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)

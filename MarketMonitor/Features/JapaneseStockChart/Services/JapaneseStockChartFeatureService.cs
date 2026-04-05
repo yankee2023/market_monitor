@@ -38,6 +38,7 @@ public sealed class JapaneseStockChartFeatureService : IJapaneseStockChartFeatur
                 Array.Empty<CandlestickRenderItem>(),
                 Array.Empty<ChartIndicatorDefinition>(),
                 Array.Empty<ChartIndicatorRenderSeries>(),
+                Array.Empty<IndicatorPanelRenderData>(),
                 0m,
                 0m,
                 320d);
@@ -53,14 +54,16 @@ public sealed class JapaneseStockChartFeatureService : IJapaneseStockChartFeatur
                 true,
                 Array.Empty<CandlestickRenderItem>(),
                 emptyRendered.IndicatorDefinitions,
-                emptyRendered.IndicatorSeries,
+                emptyRendered.OverlayIndicatorSeries,
+                emptyRendered.IndicatorPanels,
                 0m,
                 0m,
                 320d);
         }
 
         var filtered = FilterCandlesBySelectedPeriod(candles, displayPeriod);
-        var rendered = CandlestickRenderService.Build(filtered);
+        var visibleStartDate = filtered.Count == 0 ? (DateTime?)null : filtered[0].Date;
+        var rendered = CandlestickRenderService.Build(candles, visibleStartDate);
         _logger.Info($"CandlesReloadCompleted: Symbol={symbol}, Timeframe={timeframe}, Period={displayPeriod}, SourceCount={candles.Count}, FilteredCount={filtered.Count}, RenderCount={rendered.Candlesticks.Count}");
         var minPrice = filtered.Count == 0 ? 0m : filtered.Min(item => item.Low);
         var maxPrice = filtered.Count == 0 ? 0m : filtered.Max(item => item.High);
@@ -68,7 +71,8 @@ public sealed class JapaneseStockChartFeatureService : IJapaneseStockChartFeatur
             true,
             rendered.Candlesticks,
             rendered.IndicatorDefinitions,
-            rendered.IndicatorSeries,
+            rendered.OverlayIndicatorSeries,
+            rendered.IndicatorPanels,
             minPrice,
             maxPrice,
             rendered.CanvasWidth);

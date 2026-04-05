@@ -29,4 +29,9 @@ public sealed class JapaneseCandleEntry
     /// 終値。
     /// </summary>
     public decimal Close { get; set; }
+
+    /// <summary>
+    /// 出来高。
+    /// </summary>
+    public long Volume { get; set; }
 }

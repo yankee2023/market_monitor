@@ -1,0 +1,320 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+                    xmlns:infra="clr-namespace:MarketMonitor.Shared.Infrastructure">
+    <DataTemplate x:Key="JapaneseChartIndicatorOptionTemplate">
+        <CheckBox IsChecked="{Binding IsSelected}" Margin="0,0,10,6" VerticalAlignment="Center">
+            <StackPanel Orientation="Horizontal">
+                <Rectangle Width="10" Height="2" Fill="{Binding AccentColor}" VerticalAlignment="Center" Margin="0,0,6,0" />
+                <TextBlock Text="{Binding DisplayName}" Foreground="#23374D" FontSize="11" VerticalAlignment="Center" />
+            </StackPanel>
+        </CheckBox>
+    </DataTemplate>
+
+    <DataTemplate x:Key="OverlayIndicatorLegendTemplate">
+        <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
+            <Canvas Width="12" Height="8" Margin="0,0,6,0">
+                <Polyline Points="0,4 12,4" Stroke="{Binding StrokeColor}" StrokeThickness="{Binding StrokeThickness}"
+                          StrokeDashArray="{Binding StrokeDashArray}" StrokeLineJoin="Round"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+            </Canvas>
+            <TextBlock Text="{Binding LegendLabel}" FontSize="10" Foreground="#60788F" VerticalAlignment="Center" />
+        </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="JapaneseCandlestickTemplate">
+        <Border Width="34" Padding="4,4,4,0" CornerRadius="6" Background="Transparent" BorderBrush="Transparent" BorderThickness="1">
+            <Border.Style>
+                <Style TargetType="Border">
+                    <Setter Property="Background" Value="Transparent" />
+                    <Setter Property="BorderBrush" Value="Transparent" />
+                    <Style.Triggers>
+                        <Trigger Property="IsMouseOver" Value="True">
+                            <Setter Property="Background" Value="#EAF2FB" />
+                            <Setter Property="BorderBrush" Value="#BDD1E5" />
+                        </Trigger>
+                    </Style.Triggers>
+                </Style>
+            </Border.Style>
+            <StackPanel Width="26" ToolTipService.ShowDuration="60000">
+                <StackPanel.ToolTip>
+                    <ToolTip Placement="Mouse" HasDropShadow="True">
+                        <StackPanel>
+                            <TextBlock Text="{Binding DateText, StringFormat=日付: {0}}" FontWeight="SemiBold" Margin="0,0,0,6" />
+                            <TextBlock Text="{Binding OpenText, StringFormat=始値: {0}}" />
+                            <TextBlock Text="{Binding CloseText, StringFormat=終値: {0}}" />
+                            <TextBlock Text="{Binding HighText, StringFormat=高値: {0}}" />
+                            <TextBlock Text="{Binding LowText, StringFormat=安値: {0}}" />
+                            <TextBlock Text="{Binding VolumeText, StringFormat=出来高: {0}}" />
+                        </StackPanel>
+                    </ToolTip>
+                </StackPanel.ToolTip>
+                <Canvas Width="26" Height="{Binding RelativeSource={RelativeSource AncestorType=ItemsControl}, Path=ActualHeight}">
+                    <Rectangle Width="2" Height="{Binding WickHeight}" Fill="{Binding WickColor}"
+                               Canvas.Left="12" Canvas.Top="{Binding WickTop}" />
+                    <Rectangle Width="12" Height="{Binding BodyHeight}" Fill="{Binding BodyColor}"
+                               Stroke="#22303C" StrokeThickness="0.7"
+                               RadiusX="1.5" RadiusY="1.5"
+                               Canvas.Left="7" Canvas.Top="{Binding BodyTop}" />
+                </Canvas>
+            </StackPanel>
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="JapaneseCandlestickAxisLabelTemplate">
+        <Grid Width="34">
+            <TextBlock Text="{Binding Label}" FontSize="8" FontWeight="SemiBold" HorizontalAlignment="Center" Foreground="#60788F" TextAlignment="Center" Margin="0,4,0,0">
+                <TextBlock.Style>
+                    <Style TargetType="TextBlock">
+                        <Setter Property="Visibility" Value="Collapsed" />
+                        <Style.Triggers>
+                            <DataTrigger Binding="{Binding IsLabelVisible}" Value="True">
+                                <Setter Property="Visibility" Value="Visible" />
+                            </DataTrigger>
+                        </Style.Triggers>
+                    </Style>
+                </TextBlock.Style>
+            </TextBlock>
+        </Grid>
+    </DataTemplate>
+
+    <DataTemplate x:Key="IndicatorLineLegendTemplate">
+        <StackPanel Orientation="Horizontal" Margin="0,0,10,0">
+            <Canvas Width="14" Height="8" Margin="0,0,6,0">
+                <Polyline Points="0,4 14,4" Stroke="{Binding StrokeColor}" StrokeThickness="{Binding StrokeThickness}"
+                          StrokeDashArray="{Binding StrokeDashArray}" StrokeLineJoin="Round"
+                          StrokeStartLineCap="Round" StrokeEndLineCap="Round" />
+            </Canvas>
+            <TextBlock Text="{Binding LegendLabel}" FontSize="10" Foreground="#60788F" VerticalAlignment="Center" />
+        </StackPanel>
+    </DataTemplate>
+
+    <DataTemplate x:Key="IndicatorReferenceLineTemplate">
+        <Grid>
+            <Rectangle Width="{Binding DataContext.JapaneseCandlestickCanvasWidth, RelativeSource={RelativeSource AncestorType=Window}}"
+                       Height="1"
+                       Fill="{Binding StrokeColor}"
+                       Opacity="0.55" />
+            <TextBlock Text="{Binding Label}" FontSize="9" Foreground="{Binding StrokeColor}" HorizontalAlignment="Right" Margin="0,-10,4,0" />
+        </Grid>
+    </DataTemplate>
+
+    <DataTemplate x:Key="IndicatorBarItemTemplate">
+        <Rectangle Width="{Binding Width}" Height="{Binding Height}" Fill="{Binding FillColor}" RadiusX="1" RadiusY="1" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="IndicatorHoverItemTemplate">
+        <Rectangle Width="{Binding Width}" Height="96" Fill="#01FFFFFF">
+            <Rectangle.ToolTip>
+                <ToolTip Placement="Mouse" HasDropShadow="True">
+                    <TextBlock Text="{Binding TooltipText}" />
+                </ToolTip>
+            </Rectangle.ToolTip>
+        </Rectangle>
+    </DataTemplate>
+
+    <DataTemplate x:Key="IndicatorLineTemplate">
+        <Polyline Points="{Binding Points}" Stroke="{Binding StrokeColor}" StrokeThickness="{Binding StrokeThickness}"
+                  StrokeDashArray="{Binding StrokeDashArray}" StrokeLineJoin="Round"
+                  StrokeStartLineCap="Round" StrokeEndLineCap="Round" Opacity="0.95" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="IndicatorPanelTemplate">
+        <Expander Margin="0,0,0,8"
+                  IsExpanded="{Binding IsExpanded, Mode=TwoWay}"
+                  Background="#F2F7FC"
+                  BorderBrush="#DCE5F0"
+                  BorderThickness="1">
+            <Expander.Header>
+                <Grid Margin="10,6,10,6">
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="Auto" />
+                        <ColumnDefinition Width="*" />
+                        <ColumnDefinition Width="Auto" />
+                    </Grid.ColumnDefinitions>
+                    <TextBlock Grid.Column="0" Text="{Binding PanelTitle}" FontSize="12" FontWeight="SemiBold" Foreground="#23374D" VerticalAlignment="Center" />
+                    <TextBlock Grid.Column="1" Text="高さ" FontSize="10" Foreground="#60788F" Margin="16,0,8,0" VerticalAlignment="Center" />
+                    <StackPanel Grid.Column="2" Orientation="Horizontal" VerticalAlignment="Center">
+                        <Slider Width="112"
+                                Minimum="0.8"
+                                Maximum="2.4"
+                                SmallChange="0.1"
+                                LargeChange="0.2"
+                                TickFrequency="0.2"
+                                Value="{Binding PanelScale, Mode=TwoWay, UpdateSourceTrigger=PropertyChanged}" />
+                        <TextBlock Text="{Binding PanelScale, StringFormat={}{0:N1}x}" FontSize="10" Foreground="#60788F" Margin="8,0,0,0" VerticalAlignment="Center" />
+                    </StackPanel>
+                </Grid>
+            </Expander.Header>
+            <Border Background="#F7FAFD" Padding="8" BorderBrush="#DCE5F0" BorderThickness="0,1,0,0">
+                <Grid>
+                    <Grid.ColumnDefinitions>
+                        <ColumnDefinition Width="72" />
+                        <ColumnDefinition Width="*" />
+                    </Grid.ColumnDefinitions>
+
+                    <Grid Grid.Column="0" Margin="0,0,8,0">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="*" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+                        <TextBlock Grid.Row="0" Text="{Binding MaxLabel}" FontSize="10" Foreground="#60788F" Margin="0,0,6,0" />
+                        <TextBlock Grid.Row="1" Text="{Binding MidLabel}" FontSize="10" Foreground="#60788F" Margin="0,0,6,0" VerticalAlignment="Center" />
+                        <TextBlock Grid.Row="2" Text="{Binding MinLabel}" FontSize="10" Foreground="#60788F" Margin="0,0,6,0" VerticalAlignment="Bottom" />
+                        <Border Width="1" Background="#AEBFD1" HorizontalAlignment="Right" />
+                    </Grid>
+
+                    <Grid Grid.Column="1">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
+
+                        <ItemsControl Grid.Row="0" ItemsSource="{Binding LineSeries}" Margin="0,0,0,8"
+                                      ItemTemplate="{StaticResource IndicatorLineLegendTemplate}">
+                            <ItemsControl.ItemsPanel>
+                                <ItemsPanelTemplate>
+                                    <StackPanel Orientation="Horizontal" />
+                                </ItemsPanelTemplate>
+                            </ItemsControl.ItemsPanel>
+                        </ItemsControl>
+
+                        <ScrollViewer Grid.Row="1"
+                                      HorizontalScrollBarVisibility="Auto"
+                                      VerticalScrollBarVisibility="Disabled"
+                                      CanContentScroll="False"
+                                      infra:ScrollViewerSyncBehavior.GroupName="JapaneseChartHorizontal">
+                            <Border Height="{Binding PlotHeight}" MinHeight="120" ClipToBounds="True" Background="#FFFFFF" BorderBrush="#E2EBF4" BorderThickness="1" CornerRadius="6">
+                                <Canvas Width="{Binding DataContext.JapaneseCandlestickCanvasWidth, RelativeSource={RelativeSource AncestorType=Window}}"
+                                        Height="96"
+                                        RenderTransformOrigin="0.5,0">
+                                    <Canvas.RenderTransform>
+                                        <ScaleTransform ScaleY="{Binding PanelScale}" />
+                                    </Canvas.RenderTransform>
+
+                                    <ItemsControl ItemsSource="{Binding ReferenceLines}"
+                                                  Width="{Binding DataContext.JapaneseCandlestickCanvasWidth, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  Height="96"
+                                                  IsHitTestVisible="False"
+                                                  ItemTemplate="{StaticResource IndicatorReferenceLineTemplate}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <Canvas />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemContainerStyle>
+                                            <Style TargetType="ContentPresenter">
+                                                <Setter Property="Canvas.Left" Value="0" />
+                                                <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                                            </Style>
+                                        </ItemsControl.ItemContainerStyle>
+                                    </ItemsControl>
+
+                                    <Rectangle Width="{Binding DataContext.JapaneseCandlestickCanvasWidth, RelativeSource={RelativeSource AncestorType=Window}}"
+                                               Height="1"
+                                               Fill="#CBD9E6"
+                                               Canvas.Top="{Binding ZeroLineTop}">
+                                        <Rectangle.Style>
+                                            <Style TargetType="Rectangle">
+                                                <Setter Property="Visibility" Value="Collapsed" />
+                                                <Style.Triggers>
+                                                    <DataTrigger Binding="{Binding HasZeroLine}" Value="True">
+                                                        <Setter Property="Visibility" Value="Visible" />
+                                                    </DataTrigger>
+                                                </Style.Triggers>
+                                            </Style>
+                                        </Rectangle.Style>
+                                    </Rectangle>
+
+                                    <ItemsControl ItemsSource="{Binding BarItems}" ItemTemplate="{StaticResource IndicatorBarItemTemplate}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <Canvas />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemContainerStyle>
+                                            <Style TargetType="ContentPresenter">
+                                                <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                                                <Setter Property="Canvas.Top" Value="{Binding Top}" />
+                                            </Style>
+                                        </ItemsControl.ItemContainerStyle>
+                                    </ItemsControl>
+
+                                    <ItemsControl ItemsSource="{Binding LineSeries}"
+                                                  Width="{Binding DataContext.JapaneseCandlestickCanvasWidth, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  Height="96"
+                                                  IsHitTestVisible="False"
+                                                  ItemTemplate="{StaticResource IndicatorLineTemplate}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <Grid />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                    </ItemsControl>
+
+                                    <ItemsControl ItemsSource="{Binding HoverItems}"
+                                                  Width="{Binding DataContext.JapaneseCandlestickCanvasWidth, RelativeSource={RelativeSource AncestorType=Window}}"
+                                                  Height="96"
+                                                  ItemTemplate="{StaticResource IndicatorHoverItemTemplate}">
+                                        <ItemsControl.ItemsPanel>
+                                            <ItemsPanelTemplate>
+                                                <Canvas />
+                                            </ItemsPanelTemplate>
+                                        </ItemsControl.ItemsPanel>
+                                        <ItemsControl.ItemContainerStyle>
+                                            <Style TargetType="ContentPresenter">
+                                                <Setter Property="Canvas.Left" Value="{Binding Left}" />
+                                                <Setter Property="Canvas.Top" Value="0" />
+                                            </Style>
+                                        </ItemsControl.ItemContainerStyle>
+                                    </ItemsControl>
+                                </Canvas>
+                            </Border>
+                        </ScrollViewer>
+                    </Grid>
+                </Grid>
+            </Border>
+        </Expander>
+    </DataTemplate>
+
+    <DataTemplate x:Key="SectorComparisonItemTemplate">
+        <Border Padding="8" Margin="0,0,0,8" Background="#F7FAFD" CornerRadius="8" BorderBrush="#E2EBF4" BorderThickness="1">
+            <StackPanel>
+                <TextBlock Text="{Binding CompanyName}" FontWeight="SemiBold" Foreground="#23374D" />
+                <WrapPanel Margin="0,2,0,0">
+                    <TextBlock Text="{Binding Symbol}" FontSize="11" Foreground="#60788F" VerticalAlignment="Center" />
+                    <Border Margin="8,0,0,0" Style="{DynamicResource MarketSegmentBadgeBorderStyle}">
+                        <TextBlock Text="{Binding MarketSegmentDisplay}" FontSize="10" Foreground="#23374D" FontWeight="SemiBold" />
+                    </Border>
+                </WrapPanel>
+                <TextBlock Text="{Binding StockPriceDisplay, StringFormat=現在値: {0} 円}" FontSize="12" Foreground="#0E2A47" Margin="0,4,0,0" />
+            </StackPanel>
+        </Border>
+    </DataTemplate>
+
+    <DataTemplate x:Key="SidebarSummaryTemplate">
+        <Border Style="{DynamicResource SidebarCardBorderStyle}">
+            <StackPanel>
+                <TextBlock Text="{Binding CompanyDisplay}" FontSize="13" FontWeight="SemiBold" Style="{DynamicResource ReadOnlyInfoTextStyle}" />
+                <WrapPanel Margin="0,4,0,0">
+                    <TextBlock Text="{Binding SectorDisplay}" Style="{DynamicResource MutedCaptionTextStyle}" VerticalAlignment="Center" />
+                    <Border Margin="8,0,0,0" Style="{DynamicResource MarketSegmentBadgeBorderStyle}">
+                        <TextBlock Text="{Binding MarketSegmentDisplay}" FontSize="10" Foreground="#23374D" FontWeight="SemiBold" />
+                    </Border>
+                </WrapPanel>
+
+                <StackPanel Margin="0,8,0,0">
+                    <TextBlock Text="現在値" Style="{DynamicResource MutedCaptionTextStyle}" />
+                    <TextBlock Text="{Binding StockPriceDisplay}" FontSize="26" FontWeight="Bold" Foreground="#0E2A47" TextWrapping="Wrap" />
+
+                    <Border Margin="0,10,0,0" Padding="8,6" Background="#EEF4FB" CornerRadius="8" BorderBrush="#D4E0ED" BorderThickness="1">
+                        <StackPanel>
+                            <TextBlock Text="最終取得" Style="{DynamicResource MutedCaptionTextStyle}" />
+                            <TextBlock Text="{Binding StockUpdatedAtDisplay}" FontSize="11" Foreground="#60788F" Style="{DynamicResource ReadOnlyInfoTextStyle}" />
+                        </StackPanel>
+                    </Border>
+                </StackPanel>
+            </StackPanel>
+        </Border>
+    </DataTemplate>
+</ResourceDictionary>

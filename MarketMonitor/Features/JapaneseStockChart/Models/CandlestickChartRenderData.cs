@@ -11,12 +11,14 @@ public sealed class CandlestickChartRenderData
     public CandlestickChartRenderData(
         IReadOnlyList<CandlestickRenderItem> candlesticks,
         IReadOnlyList<ChartIndicatorDefinition> indicatorDefinitions,
-        IReadOnlyList<ChartIndicatorRenderSeries> indicatorSeries,
+        IReadOnlyList<ChartIndicatorRenderSeries> overlayIndicatorSeries,
+        IReadOnlyList<IndicatorPanelRenderData> indicatorPanels,
         double canvasWidth)
     {
         Candlesticks = candlesticks ?? throw new ArgumentNullException(nameof(candlesticks));
         IndicatorDefinitions = indicatorDefinitions ?? throw new ArgumentNullException(nameof(indicatorDefinitions));
-        IndicatorSeries = indicatorSeries ?? throw new ArgumentNullException(nameof(indicatorSeries));
+        OverlayIndicatorSeries = overlayIndicatorSeries ?? throw new ArgumentNullException(nameof(overlayIndicatorSeries));
+        IndicatorPanels = indicatorPanels ?? throw new ArgumentNullException(nameof(indicatorPanels));
         CanvasWidth = canvasWidth;
     }
 
@@ -33,7 +35,12 @@ public sealed class CandlestickChartRenderData
     /// <summary>
     /// 指標描画データ。
     /// </summary>
-    public IReadOnlyList<ChartIndicatorRenderSeries> IndicatorSeries { get; }
+    public IReadOnlyList<ChartIndicatorRenderSeries> OverlayIndicatorSeries { get; }
+
+    /// <summary>
+    /// 下段パネル描画データ。
+    /// </summary>
+    public IReadOnlyList<IndicatorPanelRenderData> IndicatorPanels { get; }
 
     /// <summary>
     /// チャート描画領域の横幅。

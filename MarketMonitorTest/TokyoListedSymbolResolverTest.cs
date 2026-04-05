@@ -8,17 +8,17 @@ using Xunit;
 
 namespace MarketMonitorTest;
 
-public sealed class TokyoPrimeSymbolResolverTest
+public sealed class TokyoListedSymbolResolverTest
 {
-    public TokyoPrimeSymbolResolverTest()
+    public TokyoListedSymbolResolverTest()
     {
-        TokyoPrimeSymbolResolver.ResetCache();
+        TokyoListedSymbolResolver.ResetCache();
     }
 
     [Fact]
     public async Task ResolveAsync_ExactJapaneseName_ReturnsSymbol()
     {
-        var resolver = new TokyoPrimeSymbolResolver(_ => Task.FromResult<IReadOnlyDictionary<string, string>>(
+        var resolver = new TokyoListedSymbolResolver(_ => Task.FromResult<IReadOnlyDictionary<string, string>>(
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["トヨタ自動車"] = "7203.T",
@@ -33,7 +33,7 @@ public sealed class TokyoPrimeSymbolResolverTest
     [Fact]
     public async Task ResolveAsync_NameWithKabushikiKaishaPrefix_ReturnsSymbol()
     {
-        var resolver = new TokyoPrimeSymbolResolver(_ => Task.FromResult<IReadOnlyDictionary<string, string>>(
+        var resolver = new TokyoListedSymbolResolver(_ => Task.FromResult<IReadOnlyDictionary<string, string>>(
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["ソニーグループ"] = "6758.T"
@@ -47,7 +47,7 @@ public sealed class TokyoPrimeSymbolResolverTest
     [Fact]
     public async Task ResolveAsync_UnknownName_ReturnsNull()
     {
-        var resolver = new TokyoPrimeSymbolResolver(_ => Task.FromResult<IReadOnlyDictionary<string, string>>(
+        var resolver = new TokyoListedSymbolResolver(_ => Task.FromResult<IReadOnlyDictionary<string, string>>(
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["任天堂"] = "7974.T"
@@ -61,7 +61,7 @@ public sealed class TokyoPrimeSymbolResolverTest
     [Fact]
     public async Task ResolveCompanyNameAsync_CodeInput_ReturnsCompanyName()
     {
-        var resolver = new TokyoPrimeSymbolResolver(_ => Task.FromResult<IReadOnlyDictionary<string, string>>(
+        var resolver = new TokyoListedSymbolResolver(_ => Task.FromResult<IReadOnlyDictionary<string, string>>(
             new Dictionary<string, string>(StringComparer.OrdinalIgnoreCase)
             {
                 ["トヨタ自動車"] = "7203.T",
@@ -74,27 +74,45 @@ public sealed class TokyoPrimeSymbolResolverTest
     }
 
     [Fact]
+    public async Task ResolveMarketSegmentAsync_CodeInput_ReturnsMarketSegment()
+    {
+        var httpService = new FakeHttpService();
+        var recordReader = new FakeRecordReader(
+        [
+            new TokyoListedCompanyRecord("8058", "三菱商事", "プライム（内国株式）", "卸売業")
+        ]);
+        var resolver = new TokyoListedSymbolResolver(httpService, recordReader, new TokyoMainMarketSegmentPolicy());
+
+        var result = await resolver.ResolveMarketSegmentAsync("8058", CancellationToken.None);
+
+        Assert.Equal(TokyoMarketSegment.Prime, result);
+    }
+
+    [Fact]
     public void CreateLookupKeys_ReturnsTrimmedAndNormalizedKeys()
     {
-        var keys = TokyoPrimeSymbolResolver.CreateLookupKeys(" 株式会社 三菱・商事 ").ToArray();
+        var keys = TokyoListedSymbolResolver.CreateLookupKeys(" 株式会社 三菱・商事 ").ToArray();
 
         Assert.Contains("株式会社 三菱・商事", keys);
         Assert.Contains("三菱商事", keys);
     }
 
     [Fact]
-    public void BuildSymbolsByName_FiltersPrimeRows_AndBuildsAliases()
+    public void BuildSymbolsByName_IncludesPrimeStandardGrowth_AndExcludesOthers()
     {
-        var result = TokyoPrimeSymbolResolver.BuildSymbolsByName(
+        var result = TokyoListedSymbolResolver.BuildSymbolsByName(
         [
-            new TokyoPrimeCompanyRecord("8058", "三菱商事", "プライム（内国株式）"),
-            new TokyoPrimeCompanyRecord("9999", "対象外", "スタンダード（内国株式）"),
-            new TokyoPrimeCompanyRecord(null, "欠損", "プライム（内国株式）")
+            new TokyoListedCompanyRecord("8058", "三菱商事", "プライム（内国株式）", "卸売業"),
+            new TokyoListedCompanyRecord("278A", "テスト成長", "グロース（内国株式）", "情報・通信業"),
+            new TokyoListedCompanyRecord("9999", "対象スタンダード", "スタンダード（内国株式）", "卸売業"),
+            new TokyoListedCompanyRecord("1306", "ETF対象外", "ETF・ETN", "-"),
+            new TokyoListedCompanyRecord(null, "欠損", "プライム（内国株式）", "卸売業")
         ]);
 
         Assert.Equal("8058.T", result["三菱商事"]);
-        Assert.Equal("8058.T", result["株式会社三菱商事".Replace("株式会社", string.Empty, StringComparison.Ordinal)]);
-        Assert.DoesNotContain("対象外", result.Keys);
+        Assert.Equal("278A.T", result["テスト成長"]);
+        Assert.Equal("9999.T", result["対象スタンダード"]);
+        Assert.DoesNotContain("ETF対象外", result.Keys);
     }
 
     [Fact]
@@ -103,9 +121,9 @@ public sealed class TokyoPrimeSymbolResolverTest
         var httpService = new FakeHttpService();
         var recordReader = new FakeRecordReader(
         [
-            new TokyoPrimeCompanyRecord("8058", "三菱商事", "プライム（内国株式）")
+            new TokyoListedCompanyRecord("8058", "三菱商事", "プライム（内国株式）", "卸売業")
         ]);
-        var resolver = new TokyoPrimeSymbolResolver(httpService, recordReader);
+        var resolver = new TokyoListedSymbolResolver(httpService, recordReader, new TokyoMainMarketSegmentPolicy());
 
         var first = await resolver.ResolveAsync("三菱商事", CancellationToken.None);
         var second = await resolver.ResolveAsync("三菱商事", CancellationToken.None);
@@ -132,18 +150,18 @@ public sealed class TokyoPrimeSymbolResolverTest
         }
     }
 
-    private sealed class FakeRecordReader : ITokyoPrimeCompanyRecordReader
+    private sealed class FakeRecordReader : ITokyoListedCompanyRecordReader
     {
-        private readonly IReadOnlyList<TokyoPrimeCompanyRecord> _records;
+        private readonly IReadOnlyList<TokyoListedCompanyRecord> _records;
 
-        public FakeRecordReader(IReadOnlyList<TokyoPrimeCompanyRecord> records)
+        public FakeRecordReader(IReadOnlyList<TokyoListedCompanyRecord> records)
         {
             _records = records;
         }
 
         public int ReadCalls { get; private set; }
 
-        public IReadOnlyList<TokyoPrimeCompanyRecord> Read(Stream stream)
+        public IReadOnlyList<TokyoListedCompanyRecord> Read(Stream stream)
         {
             ReadCalls++;
             return _records;

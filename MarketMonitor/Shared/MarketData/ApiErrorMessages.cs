@@ -11,7 +11,7 @@ public static class ApiErrorMessages
     public const string RateLimitMessage = "データ提供元のアクセス上限に達しました。しばらく待って再試行してください。";
 
     /// <summary>
-    /// 東証プライム外の入力に対する利用者向けメッセージ。
+    /// 東証対象外の入力に対する利用者向けメッセージ。
     /// </summary>
-    public const string TokyoPrimeOnlyMessage = "東証プライム銘柄のコードまたは銘柄名を入力してください。";
+    public const string TokyoListedOnlyMessage = "東証銘柄のコードまたは銘柄名を入力してください。";
 }

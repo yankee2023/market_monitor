@@ -1,13 +1,13 @@
-# MarketMonitor 向け Copilot 指示
+# Tokyo Market Technical 向け Copilot 指示
 
-このファイルは MarketMonitor 固有のルールだけを扱います。
+このファイルは Tokyo Market Technical 固有のルールだけを扱います。
 
 他プロジェクトにも再利用しやすい C# / WPF 共通ルールは [.github/instructions/common-csharp-wpf.instructions.md](.github/instructions/common-csharp-wpf.instructions.md) に分離しました。
 
 ## 1. スコープ
 - 本アプリケーションは日本株専用とすること。
 - 仕様変更が明示されない限り、為替機能と海外市場機能は追加しないこと。
-- ユーザー入力は東証 `.T` シンボル、または東証プライム銘柄名として扱うこと。
+- ユーザー入力は東証 `.T` シンボル、または東証プライム、スタンダード、グロース銘柄名として扱うこと。
 
 ## 2. 正本管理
 - [SPECIFICATION.md](SPECIFICATION.md)、[DESIGN.md](DESIGN.md)、実装を同一変更で整合させること。
@@ -25,7 +25,7 @@
 
 ## 4. データ取得と永続化
 - 日本株の現在値とローソク足は Yahoo Finance を主取得元、Stooq をフォールバックとすること。
-- 東証プライム銘柄名解決は JPX 上場銘柄一覧を使用すること。
+- 東証プライム、スタンダード、グロース銘柄名解決は JPX 上場銘柄一覧を使用すること。
 - SQLite 履歴スキーマは `symbol`、`stock_price`、`recorded_at` を前提とすること。
 - 依存追加や更新でライセンスに影響がある場合は [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) と README の参照も更新すること。
 

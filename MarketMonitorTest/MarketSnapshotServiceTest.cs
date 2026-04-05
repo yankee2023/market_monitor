@@ -42,7 +42,7 @@ public class MarketSnapshotServiceTest
                 }
             }
             """);
-        var resolver = new MarketSymbolResolver(new FakeTokyoPrimeResolver(), new FakeLogger());
+        var resolver = new MarketSymbolResolver(new FakeTokyoListedResolver(), new FakeLogger());
         var service = new MarketSnapshotService(new FakeLogger(), httpService, new MarketDataCache(), resolver);
 
         // Act
@@ -72,7 +72,7 @@ public class MarketSnapshotServiceTest
                         }
                         """);
         httpService.AddStringResponse("stooq.com", "Symbol,Date,Time,Open,High,Low,Close,Volume\n7203.jp,2026-04-04,15:00:00,3400,3500,3380,3473,12000000");
-        var resolver = new MarketSymbolResolver(new FakeTokyoPrimeResolver(), new FakeLogger());
+        var resolver = new MarketSymbolResolver(new FakeTokyoListedResolver(), new FakeLogger());
         var service = new MarketSnapshotService(new FakeLogger(), httpService, new MarketDataCache(), resolver);
 
         // Act
@@ -207,7 +207,7 @@ public class MarketSnapshotServiceTest
         }
     }
 
-    private sealed class FakeTokyoPrimeResolver : ITokyoPrimeSymbolResolver
+    private sealed class FakeTokyoListedResolver : ITokyoListedSymbolResolver
     {
         public Task<string?> ResolveAsync(string input, CancellationToken cancellationToken)
         {
@@ -222,6 +222,21 @@ public class MarketSnapshotServiceTest
                 "7203.T" => "トヨタ自動車",
                 _ => null
             });
+        }
+
+        public Task<string?> ResolveSectorNameAsync(string input, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<string?>("輸送用機器");
+        }
+
+        public Task<TokyoMarketSegment> ResolveMarketSegmentAsync(string input, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(TokyoMarketSegment.Prime);
+        }
+
+        public Task<IReadOnlyList<TokyoListedSectorPeer>> GetSectorPeersAsync(string input, int maxCount, CancellationToken cancellationToken)
+        {
+            return Task.FromResult<IReadOnlyList<TokyoListedSectorPeer>>(Array.Empty<TokyoListedSectorPeer>());
         }
     }
 

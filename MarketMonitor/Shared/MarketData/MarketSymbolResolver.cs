@@ -7,7 +7,7 @@ namespace MarketMonitor.Shared.MarketData;
 /// </summary>
 public sealed class MarketSymbolResolver
 {
-    private const string DefaultTokyoPrimeSymbol = "7203.T";
+    private const string DefaultTokyoListedSymbol = "7203.T";
     private static readonly Dictionary<string, string> SymbolAliases =
         new(StringComparer.OrdinalIgnoreCase)
         {
@@ -18,20 +18,20 @@ public sealed class MarketSymbolResolver
             ["三菱UFJ"] = "8306.T"
         };
 
-    private readonly ITokyoPrimeSymbolResolver _tokyoPrimeSymbolResolver;
+    private readonly ITokyoListedSymbolResolver _tokyoListedSymbolResolver;
     private readonly IAppLogger? _logger;
 
     /// <summary>
     /// シンボル解決サービスを初期化する。
     /// </summary>
-    public MarketSymbolResolver(ITokyoPrimeSymbolResolver tokyoPrimeSymbolResolver, IAppLogger? logger)
+    public MarketSymbolResolver(ITokyoListedSymbolResolver tokyoListedSymbolResolver, IAppLogger? logger)
     {
-        _tokyoPrimeSymbolResolver = tokyoPrimeSymbolResolver ?? throw new ArgumentNullException(nameof(tokyoPrimeSymbolResolver));
+        _tokyoListedSymbolResolver = tokyoListedSymbolResolver ?? throw new ArgumentNullException(nameof(tokyoListedSymbolResolver));
         _logger = logger;
     }
 
     /// <summary>
-    /// 入力を正規化し、必要に応じて東証プライム銘柄名をシンボルへ解決する。
+    /// 入力を正規化し、必要に応じて東証銘柄名をシンボルへ解決する。
     /// </summary>
     public async Task<string> ResolveAsync(string symbol, CancellationToken cancellationToken)
     {
@@ -41,14 +41,14 @@ public sealed class MarketSymbolResolver
             return normalized;
         }
 
-        var resolvedTokyoPrimeSymbol = await _tokyoPrimeSymbolResolver.ResolveAsync(normalized, cancellationToken);
-        if (!string.IsNullOrWhiteSpace(resolvedTokyoPrimeSymbol))
+        var resolvedTokyoListedSymbol = await _tokyoListedSymbolResolver.ResolveAsync(normalized, cancellationToken);
+        if (!string.IsNullOrWhiteSpace(resolvedTokyoListedSymbol))
         {
-            _logger?.Info($"TokyoPrimeSymbolResolved: Input={symbol}, Resolved={resolvedTokyoPrimeSymbol}");
-            return resolvedTokyoPrimeSymbol;
+            _logger?.Info($"TokyoListedSymbolResolved: Input={symbol}, Resolved={resolvedTokyoListedSymbol}");
+            return resolvedTokyoListedSymbol;
         }
 
-        throw new InvalidOperationException(ApiErrorMessages.TokyoPrimeOnlyMessage);
+        throw new InvalidOperationException(ApiErrorMessages.TokyoListedOnlyMessage);
     }
 
     /// <summary>
@@ -57,14 +57,41 @@ public sealed class MarketSymbolResolver
     public async Task<string?> ResolveCompanyNameAsync(string symbol, CancellationToken cancellationToken)
     {
         var normalized = NormalizeSymbolInput(symbol);
-        return await _tokyoPrimeSymbolResolver.ResolveCompanyNameAsync(normalized, cancellationToken);
+        return await _tokyoListedSymbolResolver.ResolveCompanyNameAsync(normalized, cancellationToken);
+    }
+
+    /// <summary>
+    /// セクター名を解決する。
+    /// </summary>
+    public async Task<string?> ResolveSectorNameAsync(string symbol, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeSymbolInput(symbol);
+        return await _tokyoListedSymbolResolver.ResolveSectorNameAsync(normalized, cancellationToken);
+    }
+
+    /// <summary>
+    /// 市場区分を解決する。
+    /// </summary>
+    public async Task<TokyoMarketSegment> ResolveMarketSegmentAsync(string symbol, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeSymbolInput(symbol);
+        return await _tokyoListedSymbolResolver.ResolveMarketSegmentAsync(normalized, cancellationToken);
+    }
+
+    /// <summary>
+    /// 同一セクター比較対象を取得する。
+    /// </summary>
+    public async Task<IReadOnlyList<TokyoListedSectorPeer>> GetSectorPeersAsync(string symbol, int maxCount, CancellationToken cancellationToken)
+    {
+        var normalized = NormalizeSymbolInput(symbol);
+        return await _tokyoListedSymbolResolver.GetSectorPeersAsync(normalized, maxCount, cancellationToken);
     }
 
     internal static string NormalizeSymbolInput(string symbol)
     {
         if (string.IsNullOrWhiteSpace(symbol))
         {
-            return DefaultTokyoPrimeSymbol;
+            return DefaultTokyoListedSymbol;
         }
 
         var trimmed = symbol.Trim();

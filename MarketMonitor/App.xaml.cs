@@ -7,7 +7,7 @@ namespace MarketMonitor
     /// <summary>
     /// アプリケーション全体の初期化を管理するクラス。
     /// </summary>
-    public partial class App : Application, IDisposable
+    public partial class App : System.Windows.Application, IDisposable
     {
         private MainWindow? _mainWindow;
 
@@ -18,7 +18,7 @@ namespace MarketMonitor
         {
             AppLoggingConfigurator.Configure();
 
-            Log.Information("MarketMonitor WPFを起動しました。");
+            Log.Information("Tokyo Market Technical WPFを起動しました。");
 
             base.OnStartup(e);
 
@@ -32,7 +32,7 @@ namespace MarketMonitor
         protected override void OnExit(ExitEventArgs e)
         {
             Dispose();
-            Log.Information("MarketMonitor WPFを終了します。");
+            Log.Information("Tokyo Market Technical WPFを終了します。");
             Log.CloseAndFlush();
             base.OnExit(e);
         }

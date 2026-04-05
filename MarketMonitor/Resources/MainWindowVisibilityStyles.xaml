@@ -1,0 +1,140 @@
+<ResourceDictionary xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+                    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Style x:Key="CardBorderStyle" TargetType="Border">
+        <Setter Property="Background" Value="White" />
+        <Setter Property="CornerRadius" Value="10" />
+        <Setter Property="BorderBrush" Value="#DCE5F0" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style x:Key="MutedCaptionTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="#60788F" />
+        <Setter Property="FontSize" Value="11" />
+    </Style>
+
+    <Style x:Key="SectionHeaderTextStyle" TargetType="TextBlock">
+        <Setter Property="FontSize" Value="14" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+        <Setter Property="Foreground" Value="#23374D" />
+    </Style>
+
+    <Style x:Key="ReadOnlyInfoTextBoxStyle" TargetType="TextBox">
+        <Setter Property="IsReadOnly" Value="True" />
+        <Setter Property="BorderThickness" Value="0" />
+        <Setter Property="Background" Value="Transparent" />
+    </Style>
+
+    <Style x:Key="ReadOnlyInfoTextStyle" TargetType="TextBlock">
+        <Setter Property="Foreground" Value="#23374D" />
+        <Setter Property="TextWrapping" Value="Wrap" />
+    </Style>
+
+    <Style x:Key="SidebarCardBorderStyle" TargetType="Border" BasedOn="{StaticResource CardBorderStyle}">
+        <Setter Property="Background" Value="#F8FBFE" />
+        <Setter Property="Padding" Value="10" />
+    </Style>
+
+    <Style x:Key="SidebarExpanderStyle" TargetType="Expander">
+        <Setter Property="Background" Value="#F8FBFE" />
+        <Setter Property="BorderBrush" Value="#DCE5F0" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="Margin" Value="0,8,0,0" />
+        <Setter Property="Padding" Value="0" />
+    </Style>
+
+    <Style x:Key="SidebarHostBorderStyle" TargetType="Border" BasedOn="{StaticResource CardBorderStyle}">
+        <Setter Property="Padding" Value="10" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsSidebarCollapsed}" Value="True">
+                <Setter Property="Visibility" Value="Collapsed" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="PaneGridSplitterStyle" TargetType="GridSplitter">
+        <Setter Property="HorizontalAlignment" Value="Stretch" />
+        <Setter Property="VerticalAlignment" Value="Stretch" />
+        <Setter Property="ShowsPreview" Value="True" />
+    </Style>
+
+    <Style x:Key="SidebarSplitterStyle" TargetType="GridSplitter" BasedOn="{StaticResource PaneGridSplitterStyle}">
+        <Setter Property="Background" Value="Transparent" />
+        <Setter Property="ResizeBehavior" Value="PreviousAndNext" />
+        <Setter Property="ResizeDirection" Value="Columns" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding IsSidebarCollapsed}" Value="True">
+                <Setter Property="Visibility" Value="Collapsed" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="ToolbarGhostButtonStyle" TargetType="Button">
+        <Setter Property="Padding" Value="10,4" />
+        <Setter Property="Margin" Value="0,0,8,0" />
+        <Setter Property="Background" Value="#E7EEF7" />
+        <Setter Property="Foreground" Value="#23374D" />
+        <Setter Property="BorderBrush" Value="#C7D6E6" />
+        <Setter Property="BorderThickness" Value="1" />
+        <Setter Property="FontSize" Value="11" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="SidebarSummaryValueTextStyle" TargetType="TextBlock" BasedOn="{StaticResource ReadOnlyInfoTextStyle}">
+        <Setter Property="Foreground" Value="#0E2A47" />
+        <Setter Property="FontWeight" Value="SemiBold" />
+    </Style>
+
+    <Style x:Key="MarketSegmentBadgeBorderStyle" TargetType="Border">
+        <Setter Property="Padding" Value="8,2" />
+        <Setter Property="CornerRadius" Value="999" />
+        <Setter Property="Background" Value="#E4EEF8" />
+        <Setter Property="BorderBrush" Value="#C7D6E6" />
+        <Setter Property="BorderThickness" Value="1" />
+    </Style>
+
+    <Style x:Key="VisibleJapaneseChartIndicatorsStyle" TargetType="ItemsControl">
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding HasVisibleJapaneseChartIndicators}" Value="True">
+                <Setter Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="VisibleJapaneseIndicatorPanelsStyle" TargetType="ItemsControl">
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding HasVisibleJapaneseIndicatorPanels}" Value="True">
+                <Setter Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="HiddenWhenIndicatorPanelsExistTextStyle" TargetType="TextBlock">
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding HasVisibleJapaneseIndicatorPanels}" Value="False">
+                <Setter Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="VisibleSectorComparisonItemsStyle" TargetType="ItemsControl">
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding HasSectorComparisonItems}" Value="True">
+                <Setter Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+
+    <Style x:Key="HiddenWhenSectorComparisonExistsTextStyle" TargetType="TextBlock">
+        <Setter Property="Visibility" Value="Collapsed" />
+        <Style.Triggers>
+            <DataTrigger Binding="{Binding HasSectorComparisonItems}" Value="False">
+                <Setter Property="Visibility" Value="Visible" />
+            </DataTrigger>
+        </Style.Triggers>
+    </Style>
+</ResourceDictionary>

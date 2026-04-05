@@ -1,11 +1,12 @@
 using System.Globalization;
-
 using MarketMonitor.Features.Dashboard.ViewModels;
 using MarketMonitor.Features.JapaneseStockChart.Models;
 using MarketMonitor.Features.JapaneseStockChart.Services;
 using MarketMonitor.Features.MarketSnapshot.Services;
 using MarketMonitor.Features.PriceHistory.Models;
 using MarketMonitor.Features.PriceHistory.Services;
+using MarketMonitor.Features.SectorComparison.Models;
+using MarketMonitor.Features.SectorComparison.Services;
 using MarketMonitor.Shared.Infrastructure;
 using MarketMonitor.Shared.Logging;
 using MarketSnapshotModel = MarketMonitor.Features.MarketSnapshot.Models.MarketSnapshot;
@@ -13,18 +14,16 @@ using MarketSnapshotModel = MarketMonitor.Features.MarketSnapshot.Models.MarketS
 namespace MarketMonitorTest;
 
 /// <summary>
-/// MainViewModelの画面状態管理を検証するテストクラス。
+/// MainViewModel の画面状態管理を検証するテストクラス。
 /// </summary>
 public class MainViewModelTest
 {
     /// <summary>
     /// 初期化時に取得した値が表示用プロパティへ反映されることをテスト。
-    /// 期待値: 株価、履歴、ローソク足、状態表示が更新される。
     /// </summary>
     [Fact]
     public async Task InitializeAsync_ReflectsSnapshotValues()
     {
-        // Arrange
         var snapshot = new MarketSnapshotModel
         {
             Symbol = "7203.T",
@@ -53,162 +52,86 @@ public class MainViewModelTest
             BodyTop = 18,
             BodyHeight = 16,
             BodyColor = "#00AA00",
-            WickColor = "#00AA00"
-        };
-        var indicatorDefinitions = new[]
-        {
-            new ChartIndicatorDefinition("ma5", "MA5", ChartIndicatorPlacement.OverlayPriceChart, "#F59E0B", true, 10),
-            new ChartIndicatorDefinition("ma25", "MA25", ChartIndicatorPlacement.OverlayPriceChart, "#10B981", true, 20),
-            new ChartIndicatorDefinition("ma75", "MA75", ChartIndicatorPlacement.OverlayPriceChart, "#334155", true, 30)
-        };
-        var movingAverageLine = new ChartIndicatorRenderSeries
-        {
-            IndicatorKey = "ma5",
-            IndicatorDisplayName = "MA5",
-            LegendLabel = "MA5",
-            Placement = ChartIndicatorPlacement.OverlayPriceChart,
-            DisplayOrder = 10,
-            Points = "17,120 51,100",
-            StrokeColor = "#F59E0B",
-            StrokeThickness = 1.8d
-        };
-        var movingAverageLine25 = new ChartIndicatorRenderSeries
-        {
-            IndicatorKey = "ma25",
-            IndicatorDisplayName = "MA25",
-            LegendLabel = "MA25",
-            Placement = ChartIndicatorPlacement.OverlayPriceChart,
-            DisplayOrder = 20,
-            Points = "17,130 51,110",
-            StrokeColor = "#10B981",
-            StrokeThickness = 2.1d
-        };
-        var movingAverageLine75 = new ChartIndicatorRenderSeries
-        {
-            IndicatorKey = "ma75",
-            IndicatorDisplayName = "MA75",
-            LegendLabel = "MA75",
-            Placement = ChartIndicatorPlacement.OverlayPriceChart,
-            DisplayOrder = 30,
-            Points = "17,140 51,130",
-            StrokeColor = "#334155",
-            StrokeThickness = 2.7d,
-            StrokeDashArray = "8 4"
+            WickColor = "#00AA00",
+            VolumeText = "1,200,000"
         };
         var marketSnapshotService = new FakeMarketSnapshotService(snapshot);
         var priceHistoryFeatureService = new FakePriceHistoryFeatureService(new PriceHistoryViewData([historyItem], [historyBar]));
         var japaneseStockChartFeatureService = new FakeJapaneseStockChartFeatureService(
-            new JapaneseStockChartViewData(true, [candle], indicatorDefinitions, [movingAverageLine, movingAverageLine25, movingAverageLine75], 205m, 220m, 320d));
-        var fakeLogger = new FakeLogger();
+            new JapaneseStockChartViewData(
+                true,
+                [candle],
+                CreateIndicatorDefinitions(),
+                CreateOverlaySeries(),
+                CreateIndicatorPanels(),
+                205m,
+                220m,
+                320d));
         var viewModel = new MainViewModel(
             marketSnapshotService,
             priceHistoryFeatureService,
             japaneseStockChartFeatureService,
-            fakeLogger,
-            new FakeUiDispatcherTimer());
+            new FakeSectorComparisonFeatureService(),
+            new FakeLogger(),
+            new FakeDesktopNotificationService());
 
-        // Act
         await viewModel.InitializeAsync();
 
-        // Assert
         Assert.Equal("210.50", viewModel.StockPriceDisplay);
         Assert.Equal(
-            "株価更新: " + snapshot.StockUpdatedAt.LocalDateTime.ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture),
+            "株価取得: " + snapshot.StockUpdatedAt.LocalDateTime.ToString("yyyy/MM/dd HH:mm:ss", CultureInfo.InvariantCulture),
             viewModel.StockUpdatedAtDisplay);
         Assert.Equal("銘柄: トヨタ自動車 (7203.T)", viewModel.CompanyDisplay);
-        Assert.Equal("株価 (円)", viewModel.JapaneseCandlestickYAxisTitle);
-        Assert.Equal("日付", viewModel.JapaneseCandlestickXAxisTitle);
         Assert.Equal("205.00", viewModel.JapaneseCandlestickMinPriceLabel);
         Assert.Equal("212.50", viewModel.JapaneseCandlestickMidPriceLabel);
         Assert.Equal("220.00", viewModel.JapaneseCandlestickMaxPriceLabel);
         Assert.Equal(320d, viewModel.JapaneseCandlestickCanvasWidth);
-        Assert.StartsWith("更新完了:", viewModel.StatusMessage);
+        Assert.StartsWith("表示完了:", viewModel.StatusMessage);
         Assert.Single(viewModel.PriceHistoryItems);
         Assert.Single(viewModel.StockPriceChartBars);
         Assert.Single(viewModel.JapaneseCandlesticks);
-        Assert.Equal(3, viewModel.JapaneseChartIndicatorOptions.Count);
-        Assert.Equal(3, viewModel.VisibleJapaneseChartIndicators.Count);
-    }
-
-    /// <summary>
-    /// 更新間隔に10秒未満を設定した場合に10秒へ補正されることをテスト。
-    /// 期待値: AutoUpdateIntervalSeconds が 10。
-    /// </summary>
-    [Fact]
-    public void AutoUpdateIntervalSeconds_ClampsToTen()
-    {
-        // Arrange
-        var viewModel = CreateViewModel();
-
-        // Act
-        viewModel.AutoUpdateIntervalSeconds = 1;
-
-        // Assert
-        Assert.Equal(10, viewModel.AutoUpdateIntervalSeconds);
-    }
-
-    /// <summary>
-    /// 自動更新切替コマンド実行で有効/無効が切り替わることをテスト。
-    /// 期待値: true から false へ遷移する。
-    /// </summary>
-    [Fact]
-    public void ToggleAutoUpdateCommand_TogglesEnabledState()
-    {
-        // Arrange
-        var viewModel = CreateViewModel();
-
-        // Act
-        viewModel.ToggleAutoUpdateCommand.Execute(null);
-        var first = viewModel.IsAutoUpdateEnabled;
-
-        viewModel.ToggleAutoUpdateCommand.Execute(null);
-        var second = viewModel.IsAutoUpdateEnabled;
-
-        // Assert
-        Assert.True(first);
-        Assert.False(second);
+        Assert.Equal(6, viewModel.JapaneseChartIndicatorOptions.Count);
+        Assert.Equal(3, viewModel.VisibleJapaneseOverlayIndicators.Count);
+        Assert.Equal(3, viewModel.VisibleJapaneseIndicatorPanels.Count);
+        Assert.Equal("業種: 輸送用機器", viewModel.SectorDisplay);
+        Assert.Equal("市場: プライム", viewModel.MarketSegmentDisplay);
+        Assert.NotEmpty(viewModel.SectorComparisonItems);
+        Assert.Equal("プライム", viewModel.SectorComparisonItems[0].MarketSegmentDisplay);
     }
 
     /// <summary>
     /// 現在値取得失敗時に失敗メッセージが設定されることをテスト。
-    /// 期待値: StatusMessage が "更新失敗:" で始まる。
     /// </summary>
     [Fact]
     public async Task InitializeAsync_SetsFailureMessage_WhenSnapshotLoadThrows()
     {
-        // Arrange
         var viewModel = new MainViewModel(
             new ThrowingMarketSnapshotService(),
             new FakePriceHistoryFeatureService(),
             new FakeJapaneseStockChartFeatureService(),
+            new FakeSectorComparisonFeatureService(),
             new FakeLogger(),
-            new FakeUiDispatcherTimer());
+            new FakeDesktopNotificationService());
 
-        // Act
         await viewModel.InitializeAsync();
 
-        // Assert
-        Assert.StartsWith("更新失敗:", viewModel.StatusMessage);
+        Assert.StartsWith("表示失敗:", viewModel.StatusMessage);
     }
 
     /// <summary>
     /// 日足切替コマンド実行時にチャート再読込が走ることをテスト。
-    /// 期待値: 2回目の読込が Daily 指定で発生する。
     /// </summary>
     [Fact]
     public async Task ShowDailyCandlesCommand_ReloadsChart()
     {
-        // Arrange
         var chartService = new FakeJapaneseStockChartFeatureService();
         var viewModel = CreateViewModel(japaneseStockChartFeatureService: chartService);
         await viewModel.InitializeAsync();
         chartService.PrepareNextCall();
 
-        // Act
         viewModel.ShowDailyCandlesCommand.Execute(null);
         await chartService.WaitForNextCallAsync();
 
-        // Assert
         Assert.Equal(CandleTimeframe.Daily, chartService.LastTimeframe);
         Assert.Equal("7203.T", chartService.LastSymbol);
         Assert.True(viewModel.IsDailyCandleSelected);
@@ -216,34 +139,28 @@ public class MainViewModelTest
 
     /// <summary>
     /// 表示期間切替コマンド実行時にチャート再読込が走ることをテスト。
-    /// 期待値: 2回目の読込が ThreeMonths 指定で発生する。
     /// </summary>
     [Fact]
     public async Task ShowThreeMonthsCandlesCommand_ReloadsChart()
     {
-        // Arrange
         var chartService = new FakeJapaneseStockChartFeatureService();
         var viewModel = CreateViewModel(japaneseStockChartFeatureService: chartService);
         await viewModel.InitializeAsync();
         chartService.PrepareNextCall();
 
-        // Act
         viewModel.ShowThreeMonthsCandlesCommand.Execute(null);
         await chartService.WaitForNextCallAsync();
 
-        // Assert
         Assert.Equal(CandleDisplayPeriod.ThreeMonths, chartService.LastDisplayPeriod);
         Assert.True(viewModel.IsThreeMonthsSelected);
     }
 
     /// <summary>
     /// 更新時に履歴が保存され、履歴表示コレクションが構築されることをテスト。
-    /// 期待値: 履歴件数が1件以上になる。
     /// </summary>
     [Fact]
     public async Task InitializeAsync_LoadsPriceHistoryCollections()
     {
-        // Arrange
         var historyItem = new PriceHistoryEntry
         {
             Id = 1,
@@ -260,31 +177,48 @@ public class MainViewModelTest
         var viewModel = CreateViewModel(
             priceHistoryFeatureService: new FakePriceHistoryFeatureService(new PriceHistoryViewData([historyItem], [historyBar])));
 
-        // Act
         await viewModel.InitializeAsync();
 
-        // Assert
         Assert.NotEmpty(viewModel.PriceHistoryItems);
         Assert.NotEmpty(viewModel.StockPriceChartBars);
     }
 
     /// <summary>
     /// 初期状態で日本株コードが設定されることをテスト。
-    /// 期待値: Symbol が 7203。
     /// </summary>
     [Fact]
-    public void Constructor_SetsTokyoPrimeSymbol_AsDefaultInput()
+    public void Constructor_SetsTokyoListedSymbol_AsDefaultInput()
     {
-        // Arrange
         var viewModel = CreateViewModel();
 
-        // Assert
         Assert.Equal("7203", viewModel.Symbol);
+        Assert.False(viewModel.IsSidebarCollapsed);
+        Assert.Equal("補助ペインを閉じる", viewModel.SidebarToggleText);
+    }
+
+    /// <summary>
+    /// 補助ペイン開閉コマンドで折りたたみ状態が切り替わることをテスト。
+    /// </summary>
+    [Fact]
+    public void ToggleSidebarCommand_TogglesCollapsedState()
+    {
+        var viewModel = CreateViewModel();
+
+        viewModel.ToggleSidebarCommand.Execute(null);
+
+        Assert.True(viewModel.IsSidebarCollapsed);
+        Assert.False(viewModel.IsSidebarVisible);
+        Assert.Equal("補助ペインを開く", viewModel.SidebarToggleText);
+
+        viewModel.ToggleSidebarCommand.Execute(null);
+
+        Assert.False(viewModel.IsSidebarCollapsed);
+        Assert.True(viewModel.IsSidebarVisible);
+        Assert.Equal("補助ペインを閉じる", viewModel.SidebarToggleText);
     }
 
     /// <summary>
     /// 個別指標の切替で表示中シリーズが更新されることをテスト。
-    /// 期待値: MA75 をオフにすると表示系列数が減る。
     /// </summary>
     [Fact]
     public async Task ChartIndicatorOption_CanBeToggledIndividually()
@@ -296,8 +230,24 @@ public class MainViewModelTest
         ma75.IsSelected = false;
 
         Assert.False(ma75.IsSelected);
-        Assert.Equal(2, viewModel.VisibleJapaneseChartIndicators.Count);
-        Assert.DoesNotContain(viewModel.VisibleJapaneseChartIndicators, item => item.IndicatorKey == "ma75");
+        Assert.Equal(2, viewModel.VisibleJapaneseOverlayIndicators.Count);
+        Assert.DoesNotContain(viewModel.VisibleJapaneseOverlayIndicators, item => item.IndicatorKey == "ma75");
+    }
+
+    /// <summary>
+    /// MACD トグルが MACD パネル全体を制御することをテスト。
+    /// </summary>
+    [Fact]
+    public async Task MacdIndicatorOption_HidesMacdAndSignalTogether()
+    {
+        var viewModel = CreateViewModel();
+        await viewModel.InitializeAsync();
+
+        var macd = Assert.Single(viewModel.JapaneseChartIndicatorOptions, item => item.IndicatorKey == "macd");
+        macd.IsSelected = false;
+
+        Assert.DoesNotContain(viewModel.VisibleJapaneseIndicatorPanels, item => item.PanelKey == "macd");
+        Assert.Equal(2, viewModel.VisibleJapaneseIndicatorPanels.Count);
     }
 
     private static MainViewModel CreateViewModel(
@@ -310,31 +260,150 @@ public class MainViewModelTest
             marketSnapshotService ?? new FakeMarketSnapshotService(),
             priceHistoryFeatureService ?? new FakePriceHistoryFeatureService(),
             japaneseStockChartFeatureService ?? new FakeJapaneseStockChartFeatureService(),
+            new FakeSectorComparisonFeatureService(),
             logger ?? new FakeLogger(),
-            new FakeUiDispatcherTimer());
+            new FakeDesktopNotificationService());
     }
 
-    private sealed class FakeUiDispatcherTimer : IUiDispatcherTimer
+    private static IReadOnlyList<ChartIndicatorDefinition> CreateIndicatorDefinitions()
     {
-        public TimeSpan Interval { get; set; }
+        return
+        [
+            new ChartIndicatorDefinition("ma5", "MA5", ChartIndicatorPlacement.OverlayPriceChart, "#F59E0B", true, 10),
+            new ChartIndicatorDefinition("ma25", "MA25", ChartIndicatorPlacement.OverlayPriceChart, "#10B981", true, 20),
+            new ChartIndicatorDefinition("ma75", "MA75", ChartIndicatorPlacement.OverlayPriceChart, "#334155", true, 30),
+            new ChartIndicatorDefinition("volume", "出来高", ChartIndicatorPlacement.SecondaryPanel, "#64748B", true, 40),
+            new ChartIndicatorDefinition("macd", "MACD", ChartIndicatorPlacement.SecondaryPanel, "#B91C1C", true, 50),
+            new ChartIndicatorDefinition("rsi", "RSI", ChartIndicatorPlacement.SecondaryPanel, "#7C3AED", true, 60)
+        ];
+    }
 
-        public event EventHandler? Tick;
+    private static IReadOnlyList<ChartIndicatorRenderSeries> CreateOverlaySeries()
+    {
+        return
+        [
+            new ChartIndicatorRenderSeries
+            {
+                IndicatorKey = "ma5",
+                IndicatorDisplayName = "MA5",
+                LegendLabel = "MA5",
+                Placement = ChartIndicatorPlacement.OverlayPriceChart,
+                DisplayOrder = 10,
+                Points = "17,120 51,100",
+                StrokeColor = "#F59E0B",
+                StrokeThickness = 1.8d
+            },
+            new ChartIndicatorRenderSeries
+            {
+                IndicatorKey = "ma25",
+                IndicatorDisplayName = "MA25",
+                LegendLabel = "MA25",
+                Placement = ChartIndicatorPlacement.OverlayPriceChart,
+                DisplayOrder = 20,
+                Points = "17,130 51,110",
+                StrokeColor = "#10B981",
+                StrokeThickness = 2.1d
+            },
+            new ChartIndicatorRenderSeries
+            {
+                IndicatorKey = "ma75",
+                IndicatorDisplayName = "MA75",
+                LegendLabel = "MA75",
+                Placement = ChartIndicatorPlacement.OverlayPriceChart,
+                DisplayOrder = 30,
+                Points = "17,140 51,130",
+                StrokeColor = "#334155",
+                StrokeThickness = 2.7d,
+                StrokeDashArray = "8 4"
+            }
+        ];
+    }
 
-        public bool IsRunning { get; private set; }
+    private static IReadOnlyList<IndicatorPanelRenderData> CreateIndicatorPanels()
+    {
+        return
+        [
+            new IndicatorPanelRenderData(
+                "volume",
+                "出来高",
+                40,
+                "N0",
+                null,
+                Array.Empty<ChartIndicatorRenderSeries>(),
+                [
+                    new ChartIndicatorBarItem { Left = 11d, Top = 32d, Width = 12d, Height = 64d, FillColor = "#D6282899" }
+                ],
+                Array.Empty<IndicatorReferenceLine>(),
+                0m,
+                1200000m),
+            new IndicatorPanelRenderData(
+                "macd",
+                "MACD",
+                50,
+                "N2",
+                48d,
+                [
+                    new ChartIndicatorRenderSeries
+                    {
+                        IndicatorKey = "macd",
+                        IndicatorDisplayName = "MACD",
+                        LegendLabel = "MACD",
+                        Placement = ChartIndicatorPlacement.SecondaryPanel,
+                        DisplayOrder = 50,
+                        Points = "17,40 51,32",
+                        StrokeColor = "#B91C1C",
+                        StrokeThickness = 2.0d
+                    },
+                    new ChartIndicatorRenderSeries
+                    {
+                        IndicatorKey = "macd",
+                        IndicatorDisplayName = "シグナル",
+                        LegendLabel = "シグナル",
+                        Placement = ChartIndicatorPlacement.SecondaryPanel,
+                        DisplayOrder = 51,
+                        Points = "17,42 51,34",
+                        StrokeColor = "#1D4ED8",
+                        StrokeThickness = 1.6d,
+                        StrokeDashArray = "4 3"
+                    }
+                ],
+                Array.Empty<ChartIndicatorBarItem>(),
+                Array.Empty<IndicatorReferenceLine>(),
+                -12m,
+                18m),
+            new IndicatorPanelRenderData(
+                "rsi",
+                "RSI",
+                60,
+                "N2",
+                null,
+                [
+                    new ChartIndicatorRenderSeries
+                    {
+                        IndicatorKey = "rsi",
+                        IndicatorDisplayName = "RSI",
+                        LegendLabel = "RSI",
+                        Placement = ChartIndicatorPlacement.SecondaryPanel,
+                        DisplayOrder = 60,
+                        Points = "17,48 51,44",
+                        StrokeColor = "#7C3AED",
+                        StrokeThickness = 1.8d
+                    }
+                ],
+                Array.Empty<ChartIndicatorBarItem>(),
+                [
+                    new IndicatorReferenceLine { Label = "70", Top = 28.8d, StrokeColor = "#DC2626", StrokeDashArray = "4 3" },
+                    new IndicatorReferenceLine { Label = "30", Top = 67.2d, StrokeColor = "#2563EB", StrokeDashArray = "4 3" }
+                ],
+                0m,
+                100m)
+        ];
+    }
 
-        public void Start()
+    private sealed class FakeDesktopNotificationService : IDesktopNotificationService
+    {
+        public void ShowNotification(string title, string message)
         {
-            IsRunning = true;
-        }
-
-        public void Stop()
-        {
-            IsRunning = false;
-        }
-
-        public void RaiseTick()
-        {
-            Tick?.Invoke(this, EventArgs.Empty);
         }
     }
 
@@ -423,50 +492,13 @@ public class MainViewModelTest
                         BodyTop = 18,
                         BodyHeight = 16,
                         BodyColor = "#00AA00",
-                        WickColor = "#00AA00"
+                        WickColor = "#00AA00",
+                        VolumeText = "1,200,000"
                     }
                 ],
-                [
-                    new ChartIndicatorDefinition("ma5", "MA5", ChartIndicatorPlacement.OverlayPriceChart, "#F59E0B", true, 10),
-                    new ChartIndicatorDefinition("ma25", "MA25", ChartIndicatorPlacement.OverlayPriceChart, "#10B981", true, 20),
-                    new ChartIndicatorDefinition("ma75", "MA75", ChartIndicatorPlacement.OverlayPriceChart, "#334155", true, 30)
-                ],
-                [
-                    new ChartIndicatorRenderSeries
-                    {
-                        IndicatorKey = "ma5",
-                        IndicatorDisplayName = "MA5",
-                        LegendLabel = "MA5",
-                        Placement = ChartIndicatorPlacement.OverlayPriceChart,
-                        DisplayOrder = 10,
-                        Points = "17,120 51,100",
-                        StrokeColor = "#F59E0B",
-                        StrokeThickness = 1.8d
-                    },
-                    new ChartIndicatorRenderSeries
-                    {
-                        IndicatorKey = "ma25",
-                        IndicatorDisplayName = "MA25",
-                        LegendLabel = "MA25",
-                        Placement = ChartIndicatorPlacement.OverlayPriceChart,
-                        DisplayOrder = 20,
-                        Points = "17,130 51,110",
-                        StrokeColor = "#10B981",
-                        StrokeThickness = 2.1d
-                    },
-                    new ChartIndicatorRenderSeries
-                    {
-                        IndicatorKey = "ma75",
-                        IndicatorDisplayName = "MA75",
-                        LegendLabel = "MA75",
-                        Placement = ChartIndicatorPlacement.OverlayPriceChart,
-                        DisplayOrder = 30,
-                        Points = "17,140 51,130",
-                        StrokeColor = "#334155",
-                        StrokeThickness = 2.7d,
-                        StrokeDashArray = "8 4"
-                    }
-                ],
+                CreateIndicatorDefinitions(),
+                CreateOverlaySeries(),
+                CreateIndicatorPanels(),
                 190m,
                 210m,
                 320d);
@@ -516,6 +548,26 @@ public class MainViewModelTest
 
         public void LogError(Exception exception, string message)
         {
+        }
+    }
+
+    private sealed class FakeSectorComparisonFeatureService : ISectorComparisonFeatureService
+    {
+        public Task<SectorComparisonViewData> LoadAsync(string symbol, CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new SectorComparisonViewData(
+                "輸送用機器",
+                "プライム",
+                [
+                    new SectorComparisonPeerItem
+                    {
+                        Symbol = "7267.T",
+                        CompanyName = "本田技研工業",
+                        StockPrice = 1580m,
+                        StockPriceDisplay = "1,580.00",
+                        MarketSegmentDisplay = "プライム"
+                    }
+                ]));
         }
     }
 }

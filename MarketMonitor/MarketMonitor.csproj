@@ -6,6 +6,11 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <UseWPF>true</UseWPF>
+    <UseWindowsForms>true</UseWindowsForms>
+    <AssemblyName>TokyoMarketTechnical</AssemblyName>
+    <Product>Tokyo Market Technical</Product>
+    <Title>Tokyo Market Technical</Title>
+    <Description>東証プライム、スタンダード、グロース銘柄のテクニカル分析に対応するデスクトップアプリケーション</Description>
   </PropertyGroup>
 
   <ItemGroup>
@@ -13,6 +18,12 @@
     <PackageReference Include="Microsoft.Data.Sqlite" Version="9.0.0" />
     <PackageReference Include="Serilog" Version="4.2.0" />
     <PackageReference Include="Serilog.Sinks.File" Version="6.0.0" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <Content Include="market-settings.json">
+      <CopyToOutputDirectory>PreserveNewest</CopyToOutputDirectory>
+    </Content>
   </ItemGroup>
 
 </Project>

@@ -1,4 +1,4 @@
-# MarketMonitor 設計書
+# Tokyo Market Technical 設計書
 
 ## 1. 文書目的
 本書は、[SPECIFICATION.md](SPECIFICATION.md) に定義された日本株専用仕様を、実装可能な責務分割とコンポーネント設計へ変換した設計書である。
@@ -16,16 +16,20 @@
 ## 2. 設計方針
 
 ### 2.1 対象範囲
-- 東証プライム銘柄の入力解決
+- 東証プライム、スタンダード、グロース銘柄の入力解決
 - 日本株の現在値取得
 - 日本株のローソク足取得
+- 銘柄分析表示
 - 履歴保存と履歴表示
+- チャート指標表示
+- 価格通知
+- セクター比較表示
 - ステータス表示とログ出力
 
 ### 2.2 対象外
 - 為替レートの取得・表示・保存
 - 米国株など東証以外の市場データ取得
-- 売買注文、通知、テクニカル指標の追加描画
+- 売買注文
 
 ### 2.3 アーキテクチャ原則
 - 機能ごとに縦割り Feature を設ける。
@@ -49,6 +53,7 @@
 | Features/MarketSnapshot | Features/MarketSnapshot | 日本株現在値取得 |
 | Features/PriceHistory | Features/PriceHistory | 履歴保存、履歴読込 |
 | Features/JapaneseStockChart | Features/JapaneseStockChart | ローソク足取得、描画データ生成 |
+| Features/SectorComparison | Features/SectorComparison | 同一セクター比較表示 |
 | Features/Dashboard | Features/Dashboard | 画面統合 ViewModel |
 | View | MainWindow.xaml | バインディング宣言と画面レイアウト |
 
@@ -65,13 +70,18 @@ flowchart LR
     Dashboard --> Snapshot[IMarketSnapshotService]
     Dashboard --> History[IPriceHistoryFeatureService]
     Dashboard --> Chart[IJapaneseStockChartFeatureService]
+    Dashboard --> Sector[ISectorComparisonFeatureService]
+    Dashboard --> Notify[IDesktopNotificationService]
     Snapshot --> Shared[Shared/MarketData]
     Chart --> Shared
+    Sector --> Shared
     History --> Logging[Shared/Logging]
     Composition[Composition/AppBootstrapper] --> Dashboard
     Composition --> Snapshot
     Composition --> History
     Composition --> Chart
+    Composition --> Sector
+    Composition --> Notify
 ```
 
 ---
@@ -80,17 +90,19 @@ flowchart LR
 
 ### 4.1 FR-01 入力解決
 #### 4.1.1 責務
-- ユーザー入力を東証プライム銘柄の .T シンボルへ正規化する。
+- ユーザー入力を東証対象銘柄の .T シンボルへ正規化する。
 - 別名入力を既知シンボルへ変換する。
 - JPX 一覧を用いた銘柄名解決を行う。
-- 東証プライム外の入力を利用者向けエラーへ変換する。
+- 東証対象外の入力を利用者向けエラーへ変換する。
 
 #### 4.1.2 設計要素
 | 種別 | 実装 |
 | --- | --- |
 | 共通サービス | Shared/MarketData/MarketSymbolResolver |
-| 共通サービス | Shared/MarketData/TokyoPrimeSymbolResolver |
-| 共通抽象 | Shared/MarketData/ITokyoPrimeSymbolResolver |
+| 共通サービス | Shared/MarketData/TokyoListedSymbolResolver |
+| 共通抽象 | Shared/MarketData/ITokyoListedSymbolResolver |
+| 共通ポリシー | Shared/MarketData/ITokyoMarketSegmentPolicy, Shared/MarketData/TokyoMainMarketSegmentPolicy, Shared/MarketData/ConfigurableTokyoMarketSegmentPolicy |
+| 共通設定 | Shared/MarketData/ITokyoMarketSegmentSettingsProvider, Shared/MarketData/JsonTokyoMarketSegmentSettingsProvider |
 | 共通補助 | Shared/MarketData/ApiErrorMessages |
 
 #### 4.1.3 インターフェース契約
@@ -158,6 +170,7 @@ flowchart LR
 - 足種別と表示期間を反映して表示用データを返す。
 - ローソク足描画用の正規化計算を行う。
 - 価格チャート上に重ねるチャート指標の定義と描画データを返す。
+- 下段指標パネル用の出来高、MACD 系、RSI 描画データを返す。
 - ローソク足領域の株価軸ラベルに必要な価格レンジを返す。
 
 #### 4.4.2 設計要素
@@ -180,12 +193,14 @@ flowchart LR
 - Yahoo Finance: 現在値と同じ銘柄コードを使用する。
 - Stooq: .T を .jp へ変換して利用する。
 
-### 4.5 FR-03, FR-04, FR-09 画面統合
+### 4.5 FR-03, FR-09 画面統合
 #### 4.5.1 責務
-- 手動更新と自動更新を制御する。
-- 現在値、履歴、ローソク足を一括更新する。
+- 銘柄入力に応じた分析表示を実行する。
+- 現在値、履歴、ローソク足を一括読込する。
+- 価格通知条件を管理する。
+- セクター比較表示を更新する。
 - 画面表示用プロパティとコマンドを公開する。
-- ステータスメッセージと自動更新状態を管理する。
+- ステータスメッセージを管理する。
 
 #### 4.5.2 設計要素
 | 種別 | 実装 |
@@ -203,26 +218,80 @@ flowchart LR
 - CompanyDisplay
 - StockPriceDisplay
 - StockUpdatedAtDisplay
+- MarketSegmentDisplay
 - StatusMessage
 - PriceHistoryItems
 - JapaneseCandlesticks
 - JapaneseChartIndicatorOptions
-- VisibleJapaneseChartIndicators
+- VisibleJapaneseOverlayIndicators
+- VisibleJapaneseSecondaryIndicators
 - JapaneseCandlestickYAxisTitle
 - JapaneseCandlestickXAxisTitle
 - JapaneseCandlestickMinPriceLabel
 - JapaneseCandlestickMidPriceLabel
 - JapaneseCandlestickMaxPriceLabel
+- SecondaryIndicatorMinLabel
+- SecondaryIndicatorMidLabel
+- SecondaryIndicatorMaxLabel
 - HasVisibleJapaneseChartIndicators
+- HasVisibleJapaneseSecondaryIndicators
 - JapaneseCandlestickCanvasWidth
+- AlertThresholdText
+- IsPriceAlertEnabled
+- SectorDisplay
+- SectorComparisonItems
+- HasSectorComparisonItems
 - 足種別と表示期間の選択状態プロパティ
 
-### 4.6 FR-10 ログ出力
+### 4.6 FR-11 価格到達通知
 #### 4.6.1 責務
+- 通知閾値と有効状態を管理する。
+- 現在値更新時に閾値跨ぎを判定する。
+- Windows デスクトップ通知を表示する。
+
+#### 4.6.2 設計要素
+| 種別 | 実装 |
+| --- | --- |
+| 抽象 | Shared/Infrastructure/IDesktopNotificationService |
+| 実装 | Shared/Infrastructure/WindowsDesktopNotificationService |
+
+### 4.7 FR-12 セクター比較表示
+#### 4.7.1 責務
+- JPX 一覧から業種名を解決する。
+- 同一セクター比較対象を取得する。
+- 比較対象の現在値を読み込んで表示用 DTO を返す。
+- 比較対象ごとの市場区分を表示用 DTO へ含める。
+
+### 4.8 FR-13 市場区分表示と設定
+#### 4.8.1 責務
+- 補助ペイン用サマリーへ市場区分表示を供給する。
+- 市場区分設定ファイルから対象市場のポリシーを生成する。
+- 設定読込失敗時は既定ポリシーへフォールバックする。
+
+#### 4.8.2 設計要素
+| 種別 | 実装 |
+| --- | --- |
+| 共通設定抽象 | Shared/MarketData/ITokyoMarketSegmentSettingsProvider |
+| 共通設定実装 | Shared/MarketData/JsonTokyoMarketSegmentSettingsProvider |
+| 共通ポリシー | Shared/MarketData/ConfigurableTokyoMarketSegmentPolicy |
+| Composition | Composition/AppBootstrapper |
+
+#### 4.7.2 設計要素
+| 種別 | 実装 |
+| --- | --- |
+| Feature 入口 | Features/SectorComparison/Services/ISectorComparisonFeatureService |
+| Feature 実装 | Features/SectorComparison/Services/SectorComparisonFeatureService |
+| DTO | Features/SectorComparison/Models/SectorComparisonViewData |
+| DTO | Features/SectorComparison/Models/SectorComparisonPeerItem |
+| 共通抽象 | Shared/MarketData/ITokyoListedSymbolResolver |
+
+### 4.8 FR-10 ログ出力
+
+#### 4.8.1 責務
 - ファイルログを日次ローテーションで出力する。
 - 機能横断ログを抽象化する。
 
-#### 4.6.2 設計要素
+#### 4.8.2 設計要素
 | 種別 | 実装 |
 | --- | --- |
 | Composition | Composition/AppLoggingConfigurator |
@@ -235,27 +304,40 @@ flowchart LR
 
 ### 5.1 MainWindow
 - 上段: タイトル、説明文
-- 条件入力領域: 銘柄入力、自動更新秒数、更新ボタン、自動更新切替ボタン
-- 左ペイン: チャート、縦軸株価ラベル、間引きした横軸日付ラベル、日足/週足、表示期間切替、チャート指標表示切替
-- 右ペイン: 銘柄名、株価、更新時刻。GridSplitter により幅を調整可能
+- 条件入力領域: 銘柄入力、表示ボタン、Enter 操作ガイド
+- 左ペイン: 画面の主領域としてチャート、固定表示の縦軸株価ラベル、間引きした横軸日付ラベル、日足/週足、表示期間切替、チャート指標表示切替、下段指標パネル、補助ペイン開閉ボタンを単一の分析面として表示
+- 右ペイン: 補助領域として銘柄名、業種、株価、更新時刻、価格通知設定、同業比較。GridSplitter により幅を調整可能で、画面全体から折りたたみ可能
 - 下段: ステータス
 
 ### 5.2 表示ルール
 - 為替表示領域は持たない。
 - 銘柄入力欄の例示は日本株入力例のみを表示する。
+- 余白はチャートの可視領域を優先して抑制し、閲覧専用情報は入力部品ではなくテキスト主体で表示する。
 - チャート領域は常時表示し、データ 0 件時は空コレクションを表示する。
+- メイン分析対象は左ペインの価格チャートとし、右ペインは補助情報として幅を抑えた構成とする。
+- 補助ペインは必要時のみ開く設計とし、既定では開いた状態から利用者が任意に折りたためること。
+- 補助ペインの既定幅は左ペインより小さく保ちつつ、株価や更新時刻が欠けない最小幅を確保したうえでウィンドウの拡大・縮小に追従させる。
+- 補助ペインを閉じた場合は左ペインが横幅全体を使用し、チャート可視領域を最大化する。
 - 横軸ラベルは表示件数に応じて間引いて可読性を優先する。
 - 各足にマウスオーバーした場合は日付、始値、終値、高値、安値のツールチップを表示する。
 - 指標切替 UI は ItemsControl 上の個別 CheckBox で構成し、将来の出来高や MACD も同じ枠組みに追加できるようにする。
 - 現在の価格チャートオーバーレイ指標は MA5、MA25、MA75 とする。
+- 現在の下段指標は出来高、MACD / シグナル、RSI とする。
+- MACD とシグナルは同一トグルで管理する。
+- 下段指標パネルは Expander で折りたたみ可能とし、ヘッダー上の Slider で表示高さを個別調整できるようにする。
+- 下段指標パネルは価格チャートと同一カード内に連続表示し、左ペイン全体の縦スクロールで到達できる構成とする。
 - オフにした指標は描画対象と凡例の双方から除外する。
+- 価格通知は追加の市場データ取得を行わず、現在値更新結果の閾値跨ぎで判定する。
+- 価格通知と同業比較は補助操作として右ペイン内で折りたたみ可能とし、初期視線をチャートへ誘導する。
+- セクター比較は右ペインで最大 3 銘柄を表示する。
+- 補助ペインを閉じた場合も、テクニカル分析に必要なチャート、指標切替、下段パネル操作は左ペインだけで完結すること。
 
 ---
 
 ## 6. Composition 設計
 
 ### 6.1 AppBootstrapper
-- logger, httpService, cache, tokyoPrimeSymbolResolver, marketSymbolResolver を生成する。
+- logger, httpService, cache, tokyoListedSymbolResolver, marketSymbolResolver を生成する。
 - MarketSnapshotService、PriceHistoryFeatureService、JapaneseStockChartFeatureService を組み立てる。
 - MainViewModel を生成して MainWindow へ渡す。
 
@@ -270,7 +352,7 @@ flowchart LR
 ### 7.1 単体テスト対象
 | 要求 ID | テスト対象 |
 | --- | --- |
-| FR-01 | MarketSymbolResolver, TokyoPrimeSymbolResolver |
+| FR-01 | MarketSymbolResolver, TokyoListedSymbolResolver |
 | FR-02 | MarketSnapshotService |
 | FR-03, FR-04, FR-09 | Features/Dashboard/ViewModels/MainViewModel |
 | FR-05, FR-06 | SqlitePriceHistoryRepository, PriceHistoryFeatureService |
@@ -278,7 +360,7 @@ flowchart LR
 
 ### 7.2 テスト観点
 - 4 桁コードの .T 補完
-- 東証プライム外入力の拒否
+- 東証対象外入力の拒否
 - Yahoo Finance JSON の現在値解析
 - Stooq CSV の現在値解析
 - 手動更新時の画面反映
@@ -300,7 +382,7 @@ flowchart LR
 ## 9. 実装マッピング
 | 要求 ID | 実装 |
 | --- | --- |
-| FR-01 | Shared/MarketData/MarketSymbolResolver, Shared/MarketData/TokyoPrimeSymbolResolver |
+| FR-01 | Shared/MarketData/MarketSymbolResolver, Shared/MarketData/TokyoListedSymbolResolver |
 | FR-02 | Features/MarketSnapshot/Services/MarketSnapshotService |
 | FR-03 | Features/Dashboard/ViewModels/MainViewModel.RefreshAsync |
 | FR-04 | Features/Dashboard/ViewModels/MainViewModel.ToggleAutoUpdate |

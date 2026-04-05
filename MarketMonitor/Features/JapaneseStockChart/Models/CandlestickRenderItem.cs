@@ -69,4 +69,9 @@ public sealed class CandlestickRenderItem
     /// ツールチップ表示用の安値。
     /// </summary>
     public string LowText { get; set; } = string.Empty;
+
+    /// <summary>
+    /// ツールチップ表示用の出来高。
+    /// </summary>
+    public string VolumeText { get; set; } = string.Empty;
 }

@@ -12,7 +12,8 @@ public sealed class JapaneseStockChartViewData
         bool isJapaneseStock,
         IReadOnlyList<CandlestickRenderItem> candlesticks,
         IReadOnlyList<ChartIndicatorDefinition> indicatorDefinitions,
-        IReadOnlyList<ChartIndicatorRenderSeries> indicatorSeries,
+        IReadOnlyList<ChartIndicatorRenderSeries> overlayIndicatorSeries,
+        IReadOnlyList<IndicatorPanelRenderData> indicatorPanels,
         decimal minPrice,
         decimal maxPrice,
         double canvasWidth)
@@ -20,7 +21,8 @@ public sealed class JapaneseStockChartViewData
         IsJapaneseStock = isJapaneseStock;
         Candlesticks = candlesticks ?? throw new ArgumentNullException(nameof(candlesticks));
         IndicatorDefinitions = indicatorDefinitions ?? throw new ArgumentNullException(nameof(indicatorDefinitions));
-        IndicatorSeries = indicatorSeries ?? throw new ArgumentNullException(nameof(indicatorSeries));
+        OverlayIndicatorSeries = overlayIndicatorSeries ?? throw new ArgumentNullException(nameof(overlayIndicatorSeries));
+        IndicatorPanels = indicatorPanels ?? throw new ArgumentNullException(nameof(indicatorPanels));
         MinPrice = minPrice;
         MaxPrice = maxPrice;
         CanvasWidth = canvasWidth;
@@ -44,7 +46,12 @@ public sealed class JapaneseStockChartViewData
     /// <summary>
     /// 指標描画データ。
     /// </summary>
-    public IReadOnlyList<ChartIndicatorRenderSeries> IndicatorSeries { get; }
+    public IReadOnlyList<ChartIndicatorRenderSeries> OverlayIndicatorSeries { get; }
+
+    /// <summary>
+    /// 下段パネル描画データ。
+    /// </summary>
+    public IReadOnlyList<IndicatorPanelRenderData> IndicatorPanels { get; }
 
     /// <summary>
     /// 表示対象レンジの最小株価。

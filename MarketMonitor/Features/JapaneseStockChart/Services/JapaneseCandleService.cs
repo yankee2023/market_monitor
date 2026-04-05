@@ -175,6 +175,10 @@ public sealed class JapaneseCandleService : IJapaneseCandleService
             return false;
         }
 
+        var volumeArray = quote.TryGetProperty("volume", out var fetchedVolumeArray)
+            ? fetchedVolumeArray
+            : default;
+
         var count = new[]
         {
             timestampArray.GetArrayLength(),
@@ -202,7 +206,8 @@ public sealed class JapaneseCandleService : IJapaneseCandleService
                 Open = open,
                 High = high,
                 Low = low,
-                Close = close
+                Close = close,
+                Volume = TryGetInt64(volumeArray, index, out var volume) ? volume : 0L
             });
         }
 
@@ -320,7 +325,8 @@ public sealed class JapaneseCandleService : IJapaneseCandleService
                 Open = open,
                 High = high,
                 Low = low,
-                Close = close
+                Close = close,
+                Volume = TryParseVolume(parts, out var volume) ? volume : 0L
             });
         }
 
@@ -362,6 +368,36 @@ public sealed class JapaneseCandleService : IJapaneseCandleService
         }
 
         return false;
+    }
+
+    private static bool TryParseVolume(string[] parts, out long volume)
+    {
+        volume = 0L;
+
+        var volumeIndex = parts.Length >= 7 ? 6 : parts.Length >= 6 ? 5 : -1;
+        if (volumeIndex < 0)
+        {
+            return false;
+        }
+
+        return long.TryParse(parts[volumeIndex], NumberStyles.Integer, CultureInfo.InvariantCulture, out volume);
+    }
+
+    private static bool TryGetInt64(JsonElement arrayElement, int index, out long value)
+    {
+        value = 0L;
+        if (arrayElement.ValueKind != JsonValueKind.Array || index >= arrayElement.GetArrayLength())
+        {
+            return false;
+        }
+
+        var element = arrayElement[index];
+        return element.ValueKind switch
+        {
+            JsonValueKind.Number => element.TryGetInt64(out value),
+            JsonValueKind.String => long.TryParse(element.GetString(), NumberStyles.Integer, CultureInfo.InvariantCulture, out value),
+            _ => false
+        };
     }
 
     private static bool TryParseDecimal(string text, out decimal value)
