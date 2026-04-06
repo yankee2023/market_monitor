@@ -1194,7 +1194,6 @@ classDiagram
 | FR-01 | Shared/MarketData/MarketSymbolResolver, Shared/MarketData/TokyoListedSymbolResolver |
 | FR-02 | Features/MarketSnapshot/Services/MarketSnapshotService |
 | FR-03 | Features/Dashboard/ViewModels/MainViewModel.LoadAnalysisAsync |
-| FR-04 | 廃止済み機能のため実装なし |
 | FR-05 | Features/PriceHistory/Services/SqlitePriceHistoryRepository.SaveAsync |
 | FR-06 | Features/PriceHistory/Services/PriceHistoryFeatureService.RecordAndLoadAsync |
 | FR-07 | Features/JapaneseStockChart/Services/JapaneseCandleService |

@@ -24,9 +24,11 @@
 | **開発環境** | **Visual Studio 2026** | 最新のIDE機能を活用 |
 | **言語** | **C# (.NET 9/10)** | 強力な型付けと非同期処理 |
 | **UIフレームワーク** | **WPF** | 豊富なグラフライブラリと安定性 |
-| **データ取得** | **HttpClient / JSON** | Yahoo Finance、Stooqフォールバック、JPX一覧との連携 |
+| **データ取得** | **HttpClient / JSON / ExcelDataReader** | Yahoo Finance、Stooqフォールバック、JPX一覧との連携 |
 | **データ保存** | **SQLite** | 過去の価格推移をローカルに記録 |
 | **グラフ描画** | **WPF ItemsControl (Candlestick Chart)** | 日本株チャートと軸ラベル、ツールチップを表示 |
+| **ログ・監視** | **Serilog** | 日次ローテーション出力、ファイルベースの実行ログ記録 |
+| **テスト・検証** | **xUnit** | 単体テスト、統合テスト |
 
 ---
 
