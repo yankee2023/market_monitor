@@ -526,7 +526,6 @@ sequenceDiagram
 | 共通基盤 | Shared/Infrastructure/ObservableObject |
 | 共通基盤 | Shared/Infrastructure/RelayCommand |
 | 共通基盤 | Shared/Infrastructure/AsyncRelayCommand |
-| 共通基盤 | Shared/Infrastructure/IUiDispatcherTimer, Shared/Infrastructure/WpfDispatcherTimerAdapter |
 | Composition 補助 | Composition/WindowStartupPlacementService |
 
 #### 4.5.3 画面プロパティ契約
@@ -1205,6 +1204,9 @@ classDiagram
 | FR-08C | Features/Dashboard/ViewModels/MainViewModel.RegisterJapaneseChartClick, BeginJapaneseChartPointerInteraction, UpdateJapaneseChartPointerInteraction, CompleteJapaneseChartPointerInteraction, Features/JapaneseStockChart/Services/ChartAnalysisLineService, Features/JapaneseStockChart/Services/SqliteChartAnalysisLineRepository |
 | FR-09 | Features/Dashboard/ViewModels/MainViewModel.StatusMessage |
 | FR-10 | Composition/AppLoggingConfigurator, Shared/Logging/SerilogAppLogger |
+| FR-11 | Shared/Infrastructure/IDesktopNotificationService, Shared/Infrastructure/WindowsDesktopNotificationService |
+| FR-12 | Features/SectorComparison/Services/ISectorComparisonFeatureService, Features/SectorComparison/Services/SectorComparisonFeatureService |
+| FR-13 | Shared/MarketData/ITokyoMarketSegmentSettingsProvider, Shared/MarketData/JsonTokyoMarketSegmentSettingsProvider, Shared/MarketData/ITokyoMarketSegmentPolicy, Shared/MarketData/ConfigurableTokyoMarketSegmentPolicy |
 
 以上により、本設計書は [SPECIFICATION.md](SPECIFICATION.md) から再生成可能であり、かつ実装を一意に導ける粒度を維持する。
 
