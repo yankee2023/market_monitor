@@ -3,8 +3,8 @@ name: Verify Copilot Instructions Sync
 on:
   pull_request:
     paths:
-      - .github/copilot-instructions*.md
-      - MarketMonitor/.github/copilot-instructions*.md
+      - .github/copilot-instructions.md
+      - MarketMonitor/.github/copilot-instructions.md
       - tools/check-copilot-instructions-sync.ps1
       - tools/sync-copilot-instructions.ps1
   push:
@@ -12,8 +12,8 @@ on:
       - main
       - master
     paths:
-      - .github/copilot-instructions*.md
-      - MarketMonitor/.github/copilot-instructions*.md
+      - .github/copilot-instructions.md
+      - MarketMonitor/.github/copilot-instructions.md
       - tools/check-copilot-instructions-sync.ps1
       - tools/sync-copilot-instructions.ps1
   workflow_dispatch:

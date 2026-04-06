@@ -20,6 +20,8 @@ public sealed class XamlResourceRegressionTest
             Assert.NotNull(dictionary["SidebarSummaryTemplate"]);
             Assert.NotNull(dictionary["SectorComparisonItemTemplate"]);
             Assert.NotNull(dictionary["SidebarCardBorderStyle"]);
+            Assert.NotNull(dictionary["ChartAnalysisLineTemplate"]);
+            Assert.NotNull(dictionary["ChartAnalysisPointTemplate"]);
         });
     }
 

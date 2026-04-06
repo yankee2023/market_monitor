@@ -8,13 +8,22 @@ using Xunit;
 
 namespace MarketMonitorTest;
 
+/// <summary>
+/// TokyoListedSymbolResolver の銘柄解決、市場区分解決、キャッシュ挙動を検証するテスト。
+/// </summary>
 public sealed class TokyoListedSymbolResolverTest
 {
+    /// <summary>
+    /// 各テストの前に静的キャッシュを初期化して相互干渉を防ぐ。
+    /// </summary>
     public TokyoListedSymbolResolverTest()
     {
         TokyoListedSymbolResolver.ResetCache();
     }
 
+    /// <summary>
+    /// 日本語の正式名称が一致した場合に .T シンボルへ解決されることを確認する。
+    /// </summary>
     [Fact]
     public async Task ResolveAsync_ExactJapaneseName_ReturnsSymbol()
     {
@@ -30,6 +39,9 @@ public sealed class TokyoListedSymbolResolverTest
         Assert.Equal("7203.T", result);
     }
 
+    /// <summary>
+    /// 株式会社プレフィックスを含む名称でも解決できることを確認する。
+    /// </summary>
     [Fact]
     public async Task ResolveAsync_NameWithKabushikiKaishaPrefix_ReturnsSymbol()
     {
@@ -44,6 +56,9 @@ public sealed class TokyoListedSymbolResolverTest
         Assert.Equal("6758.T", result);
     }
 
+    /// <summary>
+    /// 未登録名称は null を返して解決不能を示すことを確認する。
+    /// </summary>
     [Fact]
     public async Task ResolveAsync_UnknownName_ReturnsNull()
     {
@@ -58,6 +73,9 @@ public sealed class TokyoListedSymbolResolverTest
         Assert.Null(result);
     }
 
+    /// <summary>
+    /// 銘柄コード入力から会社名を解決できることを確認する。
+    /// </summary>
     [Fact]
     public async Task ResolveCompanyNameAsync_CodeInput_ReturnsCompanyName()
     {
@@ -73,6 +91,9 @@ public sealed class TokyoListedSymbolResolverTest
         Assert.Equal("トヨタ", result);
     }
 
+    /// <summary>
+    /// 銘柄コード入力から市場区分を解決できることを確認する。
+    /// </summary>
     [Fact]
     public async Task ResolveMarketSegmentAsync_CodeInput_ReturnsMarketSegment()
     {
@@ -88,6 +109,9 @@ public sealed class TokyoListedSymbolResolverTest
         Assert.Equal(TokyoMarketSegment.Prime, result);
     }
 
+    /// <summary>
+    /// 参照キー生成時に前後空白除去と記号正規化が行われることを確認する。
+    /// </summary>
     [Fact]
     public void CreateLookupKeys_ReturnsTrimmedAndNormalizedKeys()
     {
@@ -97,6 +121,9 @@ public sealed class TokyoListedSymbolResolverTest
         Assert.Contains("三菱商事", keys);
     }
 
+    /// <summary>
+    /// 対象市場のみ辞書へ採用し、対象外市場や不正レコードを除外することを確認する。
+    /// </summary>
     [Fact]
     public void BuildSymbolsByName_IncludesPrimeStandardGrowth_AndExcludesOthers()
     {
@@ -115,6 +142,9 @@ public sealed class TokyoListedSymbolResolverTest
         Assert.DoesNotContain("ETF対象外", result.Keys);
     }
 
+    /// <summary>
+    /// ローダー未注入時にダウンロード結果がキャッシュされ、2 回目以降は再取得しないことを確認する。
+    /// </summary>
     [Fact]
     public async Task ResolveAsync_DownloadsAndCachesSymbols_WhenLoaderIsNotInjected()
     {
@@ -134,6 +164,9 @@ public sealed class TokyoListedSymbolResolverTest
         Assert.Equal(1, recordReader.ReadCalls);
     }
 
+    /// <summary>
+    /// HTTP ストリーム取得回数を観測するテスト用サービス。
+    /// </summary>
     private sealed class FakeHttpService : IRateLimitedHttpService
     {
         public int GetStreamCalls { get; private set; }
@@ -150,6 +183,9 @@ public sealed class TokyoListedSymbolResolverTest
         }
     }
 
+    /// <summary>
+    /// 固定レコードを返すテスト用レコードリーダー。
+    /// </summary>
     private sealed class FakeRecordReader : ITokyoListedCompanyRecordReader
     {
         private readonly IReadOnlyList<TokyoListedCompanyRecord> _records;

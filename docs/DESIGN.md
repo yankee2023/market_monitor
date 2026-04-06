@@ -3,7 +3,7 @@
 ## 1. 文書目的
 本書は、[SPECIFICATION.md](SPECIFICATION.md) に定義された日本株専用仕様を、実装可能な責務分割とコンポーネント設計へ変換した設計書である。
 
-実装生成時は [templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md](templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md) を使用して、本書だけを入力にする。
+実装生成時は [templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md](../templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md) を使用して、本書だけを入力にする。
 
 本書は次の条件を満たすことを目的とする。
 
@@ -30,11 +30,13 @@
 - Phase 5 では、ローソク足チャート上へ複数の分析ラインを描画する裁量分析支援を追加する。
 - 分析ラインは、取得済みローソク足データへ重ねる軽量な表示レイヤーとして扱う。
 - 初期表示では、表示中ローソク足からトレンドライン、支持線、抵抗線を自動生成する。
-- 自動生成UIでは、全て、トレンドラインだけ、水平線だけ の対象切替を提供する。
-- 自動生成結果は、既存ラインへ追加するコマンドと、候補で置換するコマンドを分けて提供する。
+- 自動生成結果は、既存ラインへ追加するコマンドを提供する。
+- 追加時は候補線を別ウィンドウで選択できるようにし、選択済み候補のみを反映する。
 - 必要時のみ、始点と終点の 2 点指定による手動追加を許可する。
 - 分析ラインは銘柄、足種別、表示期間ごとに SQLite へ永続化する。
 - 画面上には線色と説明文を含む凡例カードを表示し、利用者が意味を即時判断できるようにする。
+- 分析ラインの配色はトレンドライン（紫系）、支持線（青緑系）、抵抗線（赤系）で統一し、移動平均線（MA 系）と色域を分離する。
+- 手動描画 UI は「開始ボタン、2 点クリック、ドラッグ調整」の 3 ステップを常時ガイド表示し、初見操作を補助する。
 
 ### 2.2 対象外
 - 為替レートの取得・表示・保存
@@ -48,6 +50,40 @@
 - Composition は依存関係の組み立てだけを担当する。
 - 旧構成の root-level Services、Models、Infrastructure、ViewModels は新構成移行完了後にビルド対象から除外する。
 - ViewModel から WPF 固有クラスを直接参照させず、必要な UI 依存は Shared/Infrastructure の抽象へ閉じ込める。
+
+### 2.6 品質ゲート方針
+- `Directory.Build.props` を正本として Roslyn Analyzer、コードスタイル診断、通常ビルド検証を常時有効にする。
+- コンパイラ警告、Analyzer 警告、コードスタイル警告はすべてビルド失敗として扱い、エラー 0 件かつ警告 0 件を維持する。
+- Information レベル診断は残置しない方針とし、必要な場合のみ抑止理由をコードまたは設定へ明示する。
+- 実装変更後の確認では、少なくとも `dotnet build` と影響範囲テストで品質ゲート未達がないことを検証する。
+
+### 2.5 本プロジェクトのアーキテクト
+
+本プロジェクトは、画面統合を `MainViewModel` に集約し、機能実装を `Features`、共通基盤を `Shared`、配線を `Composition` に分割する feature-sliced アーキテクチャを採用する。
+
+```mermaid
+flowchart LR
+    View[MainWindow.xaml] --> VM[Features/Dashboard/MainViewModel]
+    VM --> Snapshot[Features/MarketSnapshot]
+    VM --> History[Features/PriceHistory]
+    VM --> Chart[Features/JapaneseStockChart]
+    VM --> Sector[Features/SectorComparison]
+    Snapshot --> Shared[Shared/*]
+    History --> Shared
+    Chart --> Shared
+    Sector --> Shared
+    Composition[Composition/*] --> VM
+    Composition --> Snapshot
+    Composition --> History
+    Composition --> Chart
+    Composition --> Sector
+```
+
+アーキテクト方針は次の 3 点を必須とする。
+
+- 依存方向は `View -> Dashboard -> Feature -> Shared` の一方向のみとし、逆参照を禁止する。
+- `Composition` は DI と起動設定だけを担当し、業務ロジックを持たない。
+- 横断関心事（ログ、HTTP、キャッシュ、通知、共通エラー文言）は `Shared` へ集約し、各 Feature に重複実装しない。
 
 ---
 
@@ -478,7 +514,7 @@ sequenceDiagram
 - 価格通知条件を管理する。
 - セクター比較表示を更新する。
 - 分析ライン描画モードと分析ライン表示状態を管理する。
-- 分析ライン種別選択、選択状態、ドラッグ移動、永続化読込を管理する。
+- 手動描画線種選択ウィンドウ、選択状態、ドラッグ移動、永続化読込を管理する。
 - 画面表示用プロパティとコマンドを公開する。
 - ステータスメッセージを管理する。
 

@@ -45,6 +45,7 @@
                     <ColumnDefinition Width="*" MinWidth="220" />
                     <ColumnDefinition Width="Auto" />
                     <ColumnDefinition Width="Auto" />
+                    <ColumnDefinition Width="Auto" />
                 </Grid.ColumnDefinitions>
 
                 <TextBlock Grid.Column="0" VerticalAlignment="Center" Margin="0,0,8,0" Text="銘柄名/コード" FontWeight="SemiBold" />
@@ -56,7 +57,8 @@
                 </TextBox>
 
                 <Button Grid.Column="2" Content="表示" Command="{Binding ApplySymbolCommand}" Padding="16,6" Margin="0,0,10,0" />
-                <TextBlock Grid.Column="3" VerticalAlignment="Center" Text="Enter でも表示" Style="{StaticResource MutedCaptionTextStyle}" />
+                <TextBlock Grid.Column="3" VerticalAlignment="Center" Text="Enter でも表示" Margin="0,0,10,0" Style="{StaticResource MutedCaptionTextStyle}" />
+                <Button Grid.Column="4" Content="{Binding SidebarToggleText}" Command="{Binding ToggleSidebarCommand}" Style="{StaticResource ToolbarGhostButtonStyle}" />
             </Grid>
         </Border>
 
@@ -79,22 +81,25 @@
                     <DockPanel Margin="0,0,0,4">
                         <TextBlock DockPanel.Dock="Left" Text="チャート" FontSize="13" FontWeight="SemiBold" Foreground="#23374D" />
                         <StackPanel DockPanel.Dock="Right" Orientation="Horizontal">
-                            <Button Content="{Binding SidebarToggleText}" Command="{Binding ToggleSidebarCommand}" Style="{StaticResource ToolbarGhostButtonStyle}" />
-                            <Button Content="日足" Command="{Binding ShowDailyCandlesCommand}" Style="{StaticResource DailyCandleButtonStyle}" Margin="0,0,6,0" />
-                            <Button Content="週足" Command="{Binding ShowWeeklyCandlesCommand}" Style="{StaticResource WeeklyCandleButtonStyle}" />
                         </StackPanel>
                     </DockPanel>
 
                     <Grid Grid.Row="1" Margin="0,0,0,6">
+                        <Grid.RowDefinitions>
+                            <RowDefinition Height="Auto" />
+                            <RowDefinition Height="Auto" />
+                        </Grid.RowDefinitions>
                         <Grid.ColumnDefinitions>
                             <ColumnDefinition Width="Auto" />
                             <ColumnDefinition Width="8" />
                             <ColumnDefinition Width="*" />
                         </Grid.ColumnDefinitions>
 
-                        <StackPanel Grid.Column="0" Orientation="Vertical">
+                        <StackPanel Grid.Row="0" Grid.Column="0" Orientation="Vertical">
                             <TextBlock Text="表示期間" Margin="0,0,0,4" Style="{StaticResource MutedCaptionTextStyle}" />
                             <WrapPanel>
+                                <Button Content="日足" Command="{Binding ShowDailyCandlesCommand}" Style="{StaticResource DailyCandleButtonStyle}" Margin="0,0,6,6" />
+                                <Button Content="週足" Command="{Binding ShowWeeklyCandlesCommand}" Style="{StaticResource WeeklyCandleButtonStyle}" Margin="0,0,10,6" />
                                 <Button Content="1か月" Command="{Binding ShowOneMonthCandlesCommand}" Style="{StaticResource OneMonthButtonStyle}" Margin="0,0,6,6" />
                                 <Button Content="3か月" Command="{Binding ShowThreeMonthsCandlesCommand}" Style="{StaticResource ThreeMonthsButtonStyle}" Margin="0,0,6,6" />
                                 <Button Content="6か月" Command="{Binding ShowSixMonthsCandlesCommand}" Style="{StaticResource SixMonthsButtonStyle}" Margin="0,0,6,6" />
@@ -102,7 +107,7 @@
                             </WrapPanel>
                         </StackPanel>
 
-                        <StackPanel Grid.Column="2" Orientation="Vertical" HorizontalAlignment="Left">
+                        <StackPanel Grid.Row="0" Grid.Column="2" Orientation="Vertical">
                             <TextBlock Text="表示指標" Margin="0,0,0,4" Style="{StaticResource MutedCaptionTextStyle}" />
                             <ItemsControl ItemsSource="{Binding JapaneseChartIndicatorOptions}"
                                           ItemTemplate="{StaticResource JapaneseChartIndicatorOptionTemplate}">
@@ -113,6 +118,89 @@
                                 </ItemsControl.ItemsPanel>
                             </ItemsControl>
                         </StackPanel>
+
+                        <Grid Grid.Row="1" Grid.Column="0" Grid.ColumnSpan="3" Margin="0,2,0,0">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="Auto" />
+                                <ColumnDefinition Width="12" />
+                                <ColumnDefinition Width="*" />
+                            </Grid.ColumnDefinitions>
+
+                            <Expander Grid.Column="0" VerticalAlignment="Top" HorizontalAlignment="Left" Margin="0,0,0,8" IsExpanded="True"
+                                      Header="分析ライン操作" FontSize="10" Foreground="#60788F">
+                                <Border Padding="8,8,8,6" Background="#F8FBFF" BorderBrush="#DBE7F3" BorderThickness="1" CornerRadius="8" Margin="0,4,0,0">
+                                    <StackPanel Orientation="Vertical">
+                                        <WrapPanel Margin="0,0,0,4">
+                                            <Button Content="自動生成を追加" Click="OnAppendAutoAnalysisLinesClick" Style="{StaticResource ToolbarGhostButtonStyle}" Margin="0,0,8,6" />
+                                            <Button Content="{Binding AnalysisLineActionText}" Click="OnToggleManualAnalysisLineDrawingClick" Style="{StaticResource ToolbarGhostButtonStyle}" Margin="0,0,8,6" />
+                                            <Button Content="選択線を削除" Command="{Binding RemoveSelectedAnalysisLineCommand}" Style="{StaticResource ToolbarGhostButtonStyle}" Margin="0,0,8,6" />
+                                            <Button Content="全消去" Command="{Binding ClearAnalysisLinesCommand}" Style="{StaticResource ToolbarGhostButtonStyle}" Margin="0,0,0,6" />
+                                        </WrapPanel>
+                                        <TextBlock Text="{Binding AnalysisLineStatusText}" Foreground="#60788F" FontSize="10" TextWrapping="Wrap" />
+                                    </StackPanel>
+                                </Border>
+                            </Expander>
+
+                            <Expander Grid.Column="2" VerticalAlignment="Top" Margin="0,0,0,8" IsExpanded="True"
+                                      Header="各線の見方" FontSize="10" Foreground="#60788F">
+                                <Border Padding="8,8,8,6" Background="#F8FBFF" BorderBrush="#DBE7F3" BorderThickness="1" CornerRadius="8" Margin="0,4,0,0">
+                                    <StackPanel Orientation="Vertical">
+                                        <Border Background="#F6F9FD" BorderBrush="#D7E4F2" BorderThickness="1"
+                                                CornerRadius="8" Padding="8,6" Margin="0,0,0,6">
+                                            <TextBlock Text="{Binding AnalysisLineQuickGuideText}" Foreground="#486078" FontSize="10" TextWrapping="Wrap" />
+                                        </Border>
+
+                                        <ItemsControl ItemsSource="{Binding JapaneseAnalysisLineTypeOptions}" Margin="0,8,0,0">
+                                            <ItemsControl.ItemsPanel>
+                                                <ItemsPanelTemplate>
+                                                    <WrapPanel />
+                                                </ItemsPanelTemplate>
+                                            </ItemsControl.ItemsPanel>
+                                            <ItemsControl.ItemTemplate>
+                                                <DataTemplate>
+                                                    <Border Margin="0,0,8,8" Padding="8,6" Background="#F5F8FC" BorderBrush="#D8E2ED" BorderThickness="1" CornerRadius="8">
+                                                        <StackPanel>
+                                                            <StackPanel Orientation="Horizontal" Margin="0,0,0,4">
+                                                                <Canvas Width="24" Height="8" Margin="0,0,6,0">
+                                                                    <Polyline Points="0,4 24,4"
+                                                                              Stroke="{Binding StrokeColor}"
+                                                                              StrokeThickness="2.2"
+                                                                              StrokeDashArray="{Binding StrokeDashArray}"
+                                                                              StrokeStartLineCap="Round"
+                                                                              StrokeEndLineCap="Round" />
+                                                                </Canvas>
+                                                                <TextBlock Text="{Binding DisplayName}" FontSize="11" FontWeight="SemiBold" Foreground="#23374D" />
+                                                            </StackPanel>
+                                                            <TextBlock Text="{Binding Description}" FontSize="10" Foreground="#60788F" TextWrapping="Wrap" />
+                                                        </StackPanel>
+                                                    </Border>
+                                                </DataTemplate>
+                                            </ItemsControl.ItemTemplate>
+                                        </ItemsControl>
+                                        <Expander Header="自動生成の仕組みを確認する" Margin="0,6,0,0"
+                                                  FontSize="10" Foreground="#60788F" IsExpanded="False">
+                                            <Border Background="#F0F7FF" BorderBrush="#C7DFF7" BorderThickness="1"
+                                                    CornerRadius="6" Padding="10,8" Margin="0,4,0,0">
+                                                <StackPanel>
+                                                    <TextBlock Text="■ トレンドライン" FontSize="10" FontWeight="SemiBold"
+                                                               Foreground="#7C3AED" Margin="0,0,0,3" />
+                                                    <TextBlock FontSize="10" Foreground="#445566" TextWrapping="Wrap" Margin="0,0,0,8"
+                                                               Text="終値の線形回帰でトレンド方向を判定し、上昇なら安値のピボット点、下降なら高値のピボット点から「価格差＋期間スパン」が最大のペアを選んで全幅に延長します。ピボット点は前後 2 本と比較した局所最安値／最高値です。" />
+                                                    <TextBlock Text="■ 支持線" FontSize="10" FontWeight="SemiBold"
+                                                               Foreground="#0F766E" Margin="0,0,0,3" />
+                                                    <TextBlock FontSize="10" Foreground="#445566" TextWrapping="Wrap" Margin="0,0,0,8"
+                                                               Text="安値のピボット点を価格帯の下半分に絞り、価格幅の 2.5% 以内に集まる点をクラスタとみなして最多反発クラスタの平均値に水平線を引きます。クラスタが見つからない場合は期間最安値に引きます。" />
+                                                    <TextBlock Text="■ 抵抗線" FontSize="10" FontWeight="SemiBold"
+                                                               Foreground="#DC2626" Margin="0,0,0,3" />
+                                                    <TextBlock FontSize="10" Foreground="#445566" TextWrapping="Wrap"
+                                                               Text="高値のピボット点を価格帯の上半分に絞り、同様のクラスタ探索で最多跳ね返しクラスタの平均値に水平線を引きます。クラスタが見つからない場合は期間最高値に引きます。" />
+                                                </StackPanel>
+                                            </Border>
+                                        </Expander>
+                                    </StackPanel>
+                                </Border>
+                            </Expander>
+                        </Grid>
                     </Grid>
 
                     <Border Grid.Row="2" Background="#F7FAFD" CornerRadius="8" Padding="8" BorderBrush="#E2EBF4" BorderThickness="1">
@@ -174,7 +262,12 @@
                                                 <RowDefinition Height="Auto" />
                                             </Grid.RowDefinitions>
 
-                                            <Grid x:Name="MainCandlestickPlotViewport" Grid.Row="0" ClipToBounds="True">
+                                              <Grid x:Name="MainCandlestickPlotViewport"
+                                                  Grid.Row="0"
+                                                  ClipToBounds="True"
+                                                  PreviewMouseLeftButtonDown="OnChartPreviewMouseLeftButtonDown"
+                                                  PreviewMouseMove="OnChartPreviewMouseMove"
+                                                  PreviewMouseLeftButtonUp="OnChartPreviewMouseLeftButtonUp">
                                                 <Border HorizontalAlignment="Right"
                                                         VerticalAlignment="Top"
                                                         Margin="0,8,8,0"
@@ -242,6 +335,32 @@
                                                         </ItemsControl.ItemTemplate>
                                                     </ItemsControl>
 
+                                                    <ItemsControl ItemsSource="{Binding JapaneseAnalysisLines}"
+                                                                  ItemTemplate="{StaticResource ChartAnalysisLineTemplate}"
+                                                                  Width="{Binding ElementName=MainCandlestickScaledGrid, Path=ActualWidth}"
+                                                                  Height="260"
+                                                                  Panel.ZIndex="1"
+                                                                  IsHitTestVisible="False">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <Grid />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                    </ItemsControl>
+
+                                                    <ItemsControl ItemsSource="{Binding JapanesePendingAnalysisPoints}"
+                                                                  ItemTemplate="{StaticResource ChartAnalysisPointTemplate}"
+                                                                  Width="{Binding ElementName=MainCandlestickScaledGrid, Path=ActualWidth}"
+                                                                  Height="260"
+                                                                  Panel.ZIndex="2"
+                                                                  IsHitTestVisible="False">
+                                                        <ItemsControl.ItemsPanel>
+                                                            <ItemsPanelTemplate>
+                                                                <Grid />
+                                                            </ItemsPanelTemplate>
+                                                        </ItemsControl.ItemsPanel>
+                                                    </ItemsControl>
+
                                                     <ItemsControl ItemsSource="{Binding JapaneseCandlesticks}"
                                                                   ItemTemplate="{StaticResource JapaneseCandlestickTemplate}">
                                                         <ItemsControl.ItemsPanel>
@@ -251,6 +370,7 @@
                                                         </ItemsControl.ItemsPanel>
                                                     </ItemsControl>
                                                 </Grid>
+
                                             </Grid>
 
                                             <ItemsControl Grid.Row="1" ItemsSource="{Binding JapaneseCandlesticks}"

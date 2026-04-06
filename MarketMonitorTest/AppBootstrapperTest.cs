@@ -4,8 +4,14 @@ using Xunit;
 
 namespace MarketMonitorTest;
 
+/// <summary>
+/// AppBootstrapper が想定どおりに依存関係を解決できることを検証するテスト。
+/// </summary>
 public sealed class AppBootstrapperTest
 {
+    /// <summary>
+    /// MainViewModel 生成時に既定シンボルを持つ画面統合 ViewModel が返ることを確認する。
+    /// </summary>
     [Fact]
     public void CreateMainViewModel_ReturnsConfiguredMainViewModel()
     {
@@ -16,6 +22,9 @@ public sealed class AppBootstrapperTest
         Assert.Equal("7203", ((MainViewModel)viewModel).Symbol);
     }
 
+    /// <summary>
+    /// STA スレッド上で MainWindow と DataContext が解決できることを確認する。
+    /// </summary>
     [Fact]
     public void CreateMainWindow_ResolvesWindowAndViewModelFromContainer()
     {

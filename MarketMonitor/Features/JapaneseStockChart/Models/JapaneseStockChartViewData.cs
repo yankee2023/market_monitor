@@ -13,6 +13,7 @@ public sealed class JapaneseStockChartViewData
         IReadOnlyList<CandlestickRenderItem> candlesticks,
         IReadOnlyList<ChartIndicatorDefinition> indicatorDefinitions,
         IReadOnlyList<ChartIndicatorRenderSeries> overlayIndicatorSeries,
+        IReadOnlyList<ChartAnalysisLine> suggestedAnalysisLines,
         IReadOnlyList<IndicatorPanelRenderData> indicatorPanels,
         decimal minPrice,
         decimal maxPrice,
@@ -22,6 +23,7 @@ public sealed class JapaneseStockChartViewData
         Candlesticks = candlesticks ?? throw new ArgumentNullException(nameof(candlesticks));
         IndicatorDefinitions = indicatorDefinitions ?? throw new ArgumentNullException(nameof(indicatorDefinitions));
         OverlayIndicatorSeries = overlayIndicatorSeries ?? throw new ArgumentNullException(nameof(overlayIndicatorSeries));
+        SuggestedAnalysisLines = suggestedAnalysisLines ?? throw new ArgumentNullException(nameof(suggestedAnalysisLines));
         IndicatorPanels = indicatorPanels ?? throw new ArgumentNullException(nameof(indicatorPanels));
         MinPrice = minPrice;
         MaxPrice = maxPrice;
@@ -47,6 +49,11 @@ public sealed class JapaneseStockChartViewData
     /// 指標描画データ。
     /// </summary>
     public IReadOnlyList<ChartIndicatorRenderSeries> OverlayIndicatorSeries { get; }
+
+    /// <summary>
+    /// 自動生成した分析ライン候補。
+    /// </summary>
+    public IReadOnlyList<ChartAnalysisLine> SuggestedAnalysisLines { get; }
 
     /// <summary>
     /// 下段パネル描画データ。

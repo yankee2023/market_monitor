@@ -21,6 +21,34 @@
         </StackPanel>
     </DataTemplate>
 
+    <DataTemplate x:Key="ChartAnalysisLineTemplate">
+        <Line X1="{Binding X1}"
+              Y1="{Binding Y1}"
+              X2="{Binding X2}"
+              Y2="{Binding Y2}"
+              Stroke="{Binding StrokeColor}"
+              StrokeThickness="{Binding StrokeThickness}"
+              StrokeDashArray="{Binding StrokeDashArray}"
+              StrokeStartLineCap="Round"
+              StrokeEndLineCap="Round"
+              SnapsToDevicePixels="True"
+              Opacity="0.92" />
+    </DataTemplate>
+
+    <DataTemplate x:Key="ChartAnalysisPointTemplate">
+        <Canvas>
+            <Ellipse Width="10"
+                     Height="10"
+                     Fill="#0EA5E9"
+                     Stroke="#FFFFFF"
+                     StrokeThickness="1.5"
+                     Canvas.Left="{Binding X}"
+                     Canvas.Top="{Binding Y}"
+                     Margin="-5,-5,0,0"
+                     Opacity="0.95" />
+        </Canvas>
+    </DataTemplate>
+
     <DataTemplate x:Key="JapaneseCandlestickTemplate">
         <Border Width="34" Padding="4,4,4,0" CornerRadius="6" Background="Transparent" BorderBrush="Transparent" BorderThickness="1">
             <Border.Style>

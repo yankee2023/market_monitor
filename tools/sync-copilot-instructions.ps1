@@ -7,8 +7,7 @@ $rootGithub = Join-Path $repoRoot ".github"
 $solutionGithub = Join-Path $repoRoot "MarketMonitor\.github"
 
 $files = @(
-    "copilot-instructions.md",
-    "copilot-instructions-ja.md"
+    "copilot-instructions.md"
 )
 
 if (-not (Test-Path $rootGithub)) {

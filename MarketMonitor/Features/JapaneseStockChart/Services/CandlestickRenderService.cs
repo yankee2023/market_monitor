@@ -18,7 +18,7 @@ internal sealed class CandlestickRenderService
     [
         new ChartIndicatorDefinition("ma5", "MA5", ChartIndicatorPlacement.OverlayPriceChart, "#F59E0B", true, 10),
         new ChartIndicatorDefinition("ma25", "MA25", ChartIndicatorPlacement.OverlayPriceChart, "#10B981", true, 20),
-        new ChartIndicatorDefinition("ma75", "MA75", ChartIndicatorPlacement.OverlayPriceChart, "#334155", true, 30),
+        new ChartIndicatorDefinition("ma75", "MA75", ChartIndicatorPlacement.OverlayPriceChart, "#0EA5E9", true, 30),
         new ChartIndicatorDefinition("volume", "出来高", ChartIndicatorPlacement.SecondaryPanel, "#64748B", true, 40),
         new ChartIndicatorDefinition("macd", "MACD", ChartIndicatorPlacement.SecondaryPanel, "#B91C1C", true, 50),
         new ChartIndicatorDefinition("rsi", "RSI", ChartIndicatorPlacement.SecondaryPanel, "#7C3AED", true, 60)
@@ -84,7 +84,7 @@ internal sealed class CandlestickRenderService
         {
             BuildMovingAverageSeries(candles, visibleStartIndex, minPrice, range, SupportedIndicatorDefinitions[0], 5, 1.8d, string.Empty),
             BuildMovingAverageSeries(candles, visibleStartIndex, minPrice, range, SupportedIndicatorDefinitions[1], 25, 2.1d, string.Empty),
-            BuildMovingAverageSeries(candles, visibleStartIndex, minPrice, range, SupportedIndicatorDefinitions[2], 75, 2.7d, "8 4")
+            BuildMovingAverageSeries(candles, visibleStartIndex, minPrice, range, SupportedIndicatorDefinitions[2], 75, 2.7d, string.Empty)
         };
 
         var indicatorPanels = new List<IndicatorPanelRenderData>();

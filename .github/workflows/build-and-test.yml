@@ -1,0 +1,34 @@
+name: Build And Test
+
+on:
+  pull_request:
+  push:
+    branches:
+      - main
+      - master
+  workflow_dispatch:
+
+jobs:
+  build-and-test:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+
+      - name: Restore solution
+        run: dotnet restore MarketMonitor/MarketMonitor.slnx
+
+      - name: Build solution
+        run: dotnet build MarketMonitor/MarketMonitor.slnx --configuration Release --no-restore
+
+      - name: Test MarketMonitor
+        run: dotnet test MarketMonitorTest/MarketMonitorTest.csproj --configuration Release --no-build -p:CollectCoverage=false
+
+      - name: Test Console PoC
+        run: dotnet test MarketMonitor.ConsolePoCTest/MarketMonitor.ConsolePoCTest.csproj --configuration Release --no-build

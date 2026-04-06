@@ -27,12 +27,15 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
 {
     private const int HistoryItemLimit = 20;
     private const int CandleFetchLimit = 320;
+    private const double AnalysisLineCanvasHeight = 260d;
 
     private readonly IMarketSnapshotService _marketSnapshotService;
     private readonly IPriceHistoryFeatureService _priceHistoryFeatureService;
     private readonly IJapaneseStockChartFeatureService _japaneseStockChartFeatureService;
     private readonly ISectorComparisonFeatureService _sectorComparisonFeatureService;
     private readonly IChartIndicatorSelectionService _chartIndicatorSelectionService;
+    private readonly IChartAnalysisLineRepository _chartAnalysisLineRepository;
+    private readonly IChartAnalysisLineService _chartAnalysisLineService;
     private readonly IAppLogger _logger;
     private readonly IDesktopNotificationService _desktopNotificationService;
 
@@ -44,6 +47,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     private double _japaneseCandlestickCanvasWidth = 320d;
     private readonly List<ChartIndicatorRenderSeries> _allJapaneseOverlayIndicatorSeries = [];
     private readonly List<IndicatorPanelRenderData> _allJapaneseIndicatorPanels = [];
+    private readonly List<ChartAnalysisLine> _japaneseAnalysisLineDefinitions = [];
+    private readonly List<ChartAnalysisLine> _suggestedJapaneseAnalysisLines = [];
     private readonly string _japaneseCandlestickYAxisTitle = "株価 (円)";
     private readonly string _japaneseCandlestickXAxisTitle = "日付";
     private string _companyName = string.Empty;
@@ -55,9 +60,20 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     private bool _isSidebarCollapsed;
     private bool _hasPriceAlertBaseline;
     private bool _wasAlertAtOrAboveThreshold;
+    private bool _isAnalysisLineDrawingEnabled;
+    private Guid? _selectedJapaneseAnalysisLineId;
+    private bool _isJapaneseAnalysisLineDragging;
+    private double _lastJapaneseAnalysisLinePointerXRatio;
+    private double _lastJapaneseAnalysisLinePointerYRatio;
+    private bool _hasPendingAnalysisLinePoint;
+    private double _pendingAnalysisLinePointXRatio;
+    private double _pendingAnalysisLinePointYRatio;
+    private ChartAnalysisLineType _selectedJapaneseAnalysisLineType = ChartAnalysisLineType.TrendLine;
     private CandleTimeframe _selectedCandleTimeframe = CandleTimeframe.Daily;
     private CandleDisplayPeriod _selectedCandleDisplayPeriod = CandleDisplayPeriod.OneMonth;
     private string _currentSnapshotSymbol = "7203.T";
+    private readonly RelayCommand _removeSelectedAnalysisLineCommand;
+    private readonly RelayCommand _clearAnalysisLinesCommand;
 
     /// <summary>
     /// ViewModel を初期化する。
@@ -69,13 +85,17 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
         ISectorComparisonFeatureService sectorComparisonFeatureService,
         IAppLogger logger,
         IDesktopNotificationService desktopNotificationService,
-        IChartIndicatorSelectionService? chartIndicatorSelectionService = null)
+        IChartIndicatorSelectionService? chartIndicatorSelectionService = null,
+        IChartAnalysisLineRepository? chartAnalysisLineRepository = null,
+        IChartAnalysisLineService? chartAnalysisLineService = null)
     {
         _marketSnapshotService = marketSnapshotService ?? throw new ArgumentNullException(nameof(marketSnapshotService));
         _priceHistoryFeatureService = priceHistoryFeatureService ?? throw new ArgumentNullException(nameof(priceHistoryFeatureService));
         _japaneseStockChartFeatureService = japaneseStockChartFeatureService ?? throw new ArgumentNullException(nameof(japaneseStockChartFeatureService));
         _sectorComparisonFeatureService = sectorComparisonFeatureService ?? throw new ArgumentNullException(nameof(sectorComparisonFeatureService));
         _chartIndicatorSelectionService = chartIndicatorSelectionService ?? new ChartIndicatorSelectionService();
+        _chartAnalysisLineRepository = chartAnalysisLineRepository ?? new SqliteChartAnalysisLineRepository(logger);
+        _chartAnalysisLineService = chartAnalysisLineService ?? new ChartAnalysisLineService();
         _logger = logger ?? throw new ArgumentNullException(nameof(logger));
         _desktopNotificationService = desktopNotificationService ?? throw new ArgumentNullException(nameof(desktopNotificationService));
 
@@ -85,6 +105,9 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
         JapaneseChartIndicatorOptions = new ObservableCollection<ChartIndicatorToggleItem>();
         VisibleJapaneseOverlayIndicators = new ObservableCollection<ChartIndicatorRenderSeries>();
         VisibleJapaneseIndicatorPanels = new ObservableCollection<IndicatorPanelRenderData>();
+        JapaneseAnalysisLines = new ObservableCollection<ChartAnalysisLineRenderItem>();
+        JapanesePendingAnalysisPoints = new ObservableCollection<ChartAnalysisPointRenderItem>();
+        JapaneseAnalysisLineTypeOptions = new ObservableCollection<ChartAnalysisLineTypeOption>(CreateAnalysisLineTypeOptions());
         SectorComparisonItems = new ObservableCollection<SectorComparisonPeerItem>();
 
         ApplySymbolCommand = new AsyncRelayCommand(LoadAnalysisAsync);
@@ -95,6 +118,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
         ShowThreeMonthsCandlesCommand = new AsyncRelayCommand(() => ChangeCandlePeriodAsync(CandleDisplayPeriod.ThreeMonths));
         ShowSixMonthsCandlesCommand = new AsyncRelayCommand(() => ChangeCandlePeriodAsync(CandleDisplayPeriod.SixMonths));
         ShowOneYearCandlesCommand = new AsyncRelayCommand(() => ChangeCandlePeriodAsync(CandleDisplayPeriod.OneYear));
+        _removeSelectedAnalysisLineCommand = new RelayCommand(RemoveSelectedAnalysisLine, () => _selectedJapaneseAnalysisLineId.HasValue);
+        _clearAnalysisLinesCommand = new RelayCommand(ClearAnalysisLines, () => _japaneseAnalysisLineDefinitions.Count > 0 || _hasPendingAnalysisLinePoint);
     }
 
     /// <summary>
@@ -214,7 +239,77 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     /// <summary>
     /// 補助ペイン開閉ボタン表示文言。
     /// </summary>
-    public string SidebarToggleText => IsSidebarCollapsed ? "補助ペインを開く" : "補助ペインを閉じる";
+    public string SidebarToggleText => IsSidebarCollapsed ? "詳細情報を表示" : "詳細情報を隠す";
+
+    /// <summary>
+    /// 分析ライン描画モード有効状態。
+    /// </summary>
+    public bool IsAnalysisLineDrawingEnabled
+    {
+        get => _isAnalysisLineDrawingEnabled;
+        private set => SetProperty(ref _isAnalysisLineDrawingEnabled, value);
+    }
+
+    /// <summary>
+    /// 選択中の分析ライン種別。
+    /// </summary>
+    public ChartAnalysisLineType SelectedJapaneseAnalysisLineType
+    {
+        get => _selectedJapaneseAnalysisLineType;
+        private set => SetProperty(ref _selectedJapaneseAnalysisLineType, value);
+    }
+
+    /// <summary>
+    /// 分析ライン操作ボタン表示文言。
+    /// </summary>
+    public string AnalysisLineActionText => IsAnalysisLineDrawingEnabled ? "手動描画を終了" : "手動で線を描く";
+
+    /// <summary>
+    /// 手動描画ガイド文言。
+    /// </summary>
+    public string AnalysisLineQuickGuideText
+    {
+        get
+        {
+            if (!IsAnalysisLineDrawingEnabled)
+            {
+                return "手順: 1) 手動で線を描く を押す 2) 線種を選ぶ 3) チャートを2回クリック";
+            }
+
+            return _hasPendingAnalysisLinePoint
+                ? "手順 2/2: 終点をクリックしてください。"
+                : "手順 1/2: まず始点をクリックしてください。";
+        }
+    }
+
+    /// <summary>
+    /// 分析ライン操作状況を表示する。
+    /// </summary>
+    public string AnalysisLineStatusText
+    {
+        get
+        {
+            var selectedLineText = _selectedJapaneseAnalysisLineId.HasValue
+                ? $"選択中: {GetAnalysisLineTypeDisplayName(GetSelectedAnalysisLine()?.LineType ?? ChartAnalysisLineType.TrendLine)}。"
+                : string.Empty;
+
+            if (IsAnalysisLineDrawingEnabled)
+            {
+                var lineCountPrefix = _japaneseAnalysisLineDefinitions.Count > 0
+                    ? $"分析ライン {_japaneseAnalysisLineDefinitions.Count} 本を表示中です。"
+                    : string.Empty;
+                var pendingLineTypeText = $"追加する線種: {GetAnalysisLineTypeDisplayName(SelectedJapaneseAnalysisLineType)}。";
+
+                return _hasPendingAnalysisLinePoint
+                    ? $"{lineCountPrefix}{selectedLineText}{pendingLineTypeText}終点をクリックすると線を追加できます。"
+                    : $"{lineCountPrefix}{selectedLineText}{pendingLineTypeText}始点をクリックして手動描画を開始してください。";
+            }
+
+            return _japaneseAnalysisLineDefinitions.Count <= 0
+                ? (string.IsNullOrWhiteSpace(selectedLineText) ? "分析ラインは未描画です。手動描画ボタンから追加できます。" : selectedLineText)
+                : $"分析ライン {_japaneseAnalysisLineDefinitions.Count} 本を表示中です。{selectedLineText}ドラッグで位置調整できます。";
+        }
+    }
 
     /// <summary>
     /// ローソク足チャート描画領域の横幅。
@@ -268,6 +363,36 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     /// 現在表示中の下段指標パネル。
     /// </summary>
     public ObservableCollection<IndicatorPanelRenderData> VisibleJapaneseIndicatorPanels { get; }
+
+    /// <summary>
+    /// 現在表示中の分析ライン。
+    /// </summary>
+    public ObservableCollection<ChartAnalysisLineRenderItem> JapaneseAnalysisLines { get; }
+
+    /// <summary>
+    /// 手動描画中の始点マーカー。
+    /// </summary>
+    public ObservableCollection<ChartAnalysisPointRenderItem> JapanesePendingAnalysisPoints { get; }
+
+    /// <summary>
+    /// 分析ライン種別選択肢。
+    /// </summary>
+    public ObservableCollection<ChartAnalysisLineTypeOption> JapaneseAnalysisLineTypeOptions { get; }
+
+    /// <summary>
+    /// 分析ライン表示有無。
+    /// </summary>
+    public bool HasJapaneseAnalysisLines => JapaneseAnalysisLines.Count > 0;
+
+    /// <summary>
+    /// 手動描画の始点が設定済みかどうか。
+    /// </summary>
+    public bool HasPendingJapaneseAnalysisPoint => JapanesePendingAnalysisPoints.Count > 0;
+
+    /// <summary>
+    /// 選択中の分析ラインが存在するかどうか。
+    /// </summary>
+    public bool HasSelectedJapaneseAnalysisLine => _selectedJapaneseAnalysisLineId.HasValue;
 
     /// <summary>
     /// 下段指標パネル表示有無。
@@ -373,12 +498,231 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     public ICommand ShowOneYearCandlesCommand { get; }
 
     /// <summary>
+    /// 選択中の分析ラインを削除するコマンド。
+    /// </summary>
+    public ICommand RemoveSelectedAnalysisLineCommand => _removeSelectedAnalysisLineCommand;
+
+    /// <summary>
+    /// 分析ラインを全消去するコマンド。
+    /// </summary>
+    public ICommand ClearAnalysisLinesCommand => _clearAnalysisLinesCommand;
+
+    /// <summary>
     /// 初期表示時の処理。
     /// </summary>
     public async Task InitializeAsync()
     {
         _logger.Info("初期表示時の分析読込を開始します。");
         await LoadAnalysisAsync();
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<ChartAnalysisLineTypeOption> GetManualAnalysisLineTypeOptions()
+    {
+        return JapaneseAnalysisLineTypeOptions.ToArray();
+    }
+
+    /// <inheritdoc />
+    public void StartManualAnalysisLineDrawing(ChartAnalysisLineType lineType)
+    {
+        SelectedJapaneseAnalysisLineType = lineType;
+        _hasPendingAnalysisLinePoint = false;
+        IsAnalysisLineDrawingEnabled = true;
+        OnAnalysisLineStateChanged();
+    }
+
+    /// <inheritdoc />
+    public void CancelManualAnalysisLineDrawing()
+    {
+        if (!IsAnalysisLineDrawingEnabled && !_hasPendingAnalysisLinePoint)
+        {
+            return;
+        }
+
+        _hasPendingAnalysisLinePoint = false;
+        IsAnalysisLineDrawingEnabled = false;
+        OnAnalysisLineStateChanged();
+    }
+
+    /// <inheritdoc />
+    public void RegisterJapaneseChartClick(double chartX, double chartY)
+    {
+        if (!IsAnalysisLineDrawingEnabled || JapaneseCandlestickCanvasWidth <= 0d)
+        {
+            return;
+        }
+
+        var normalizedXRatio = NormalizeCoordinate(chartX, JapaneseCandlestickCanvasWidth);
+        var normalizedYRatio = NormalizeCoordinate(chartY, AnalysisLineCanvasHeight);
+
+        if (!_hasPendingAnalysisLinePoint)
+        {
+            _pendingAnalysisLinePointXRatio = normalizedXRatio;
+            _pendingAnalysisLinePointYRatio = normalizedYRatio;
+            _hasPendingAnalysisLinePoint = true;
+            OnAnalysisLineStateChanged();
+            return;
+        }
+
+        var line = _chartAnalysisLineService.CreateLine(
+            SelectedJapaneseAnalysisLineType,
+            _pendingAnalysisLinePointXRatio,
+            _pendingAnalysisLinePointYRatio,
+            normalizedXRatio,
+            normalizedYRatio);
+
+        _hasPendingAnalysisLinePoint = false;
+
+        if (line is null)
+        {
+            StatusMessage = "分析ラインの始点と終点が近すぎるため追加できません。";
+            OnAnalysisLineStateChanged();
+            return;
+        }
+
+        _japaneseAnalysisLineDefinitions.Add(line);
+        _selectedJapaneseAnalysisLineId = line.Id;
+        IsAnalysisLineDrawingEnabled = false;
+        RefreshJapaneseAnalysisLines();
+        StatusMessage = $"分析ラインを追加しました。現在 {_japaneseAnalysisLineDefinitions.Count} 本です。ドラッグで位置を調整できます。";
+        OnAnalysisLineStateChanged();
+        PersistJapaneseAnalysisLinesInBackground(GetSymbolForCandles(), SelectedCandleTimeframe, SelectedCandleDisplayPeriod, _japaneseAnalysisLineDefinitions.ToArray());
+    }
+
+    /// <inheritdoc />
+    public bool BeginJapaneseChartPointerInteraction(double chartX, double chartY)
+    {
+        if (IsAnalysisLineDrawingEnabled)
+        {
+            RegisterJapaneseChartClick(chartX, chartY);
+            return true;
+        }
+
+        if (!TryNormalizeChartPoint(chartX, chartY, out var normalizedXRatio, out var normalizedYRatio))
+        {
+            return false;
+        }
+
+        var selectedId = _chartAnalysisLineService.FindNearestLineId(
+            _japaneseAnalysisLineDefinitions,
+            normalizedXRatio,
+            normalizedYRatio,
+            CalculateHitToleranceRatio());
+
+        _selectedJapaneseAnalysisLineId = selectedId;
+        _isJapaneseAnalysisLineDragging = selectedId.HasValue;
+        _lastJapaneseAnalysisLinePointerXRatio = normalizedXRatio;
+        _lastJapaneseAnalysisLinePointerYRatio = normalizedYRatio;
+        RefreshJapaneseAnalysisLines();
+        OnAnalysisLineStateChanged();
+
+        return selectedId.HasValue;
+    }
+
+    /// <inheritdoc />
+    public bool UpdateJapaneseChartPointerInteraction(double chartX, double chartY)
+    {
+        if (!_isJapaneseAnalysisLineDragging || !_selectedJapaneseAnalysisLineId.HasValue)
+        {
+            return false;
+        }
+
+        if (!TryNormalizeChartPoint(chartX, chartY, out var normalizedXRatio, out var normalizedYRatio))
+        {
+            return false;
+        }
+
+        var deltaXRatio = normalizedXRatio - _lastJapaneseAnalysisLinePointerXRatio;
+        var deltaYRatio = normalizedYRatio - _lastJapaneseAnalysisLinePointerYRatio;
+        if (Math.Abs(deltaXRatio) < double.Epsilon && Math.Abs(deltaYRatio) < double.Epsilon)
+        {
+            return false;
+        }
+
+        ReplaceAnalysisLine(_selectedJapaneseAnalysisLineId.Value, line => _chartAnalysisLineService.MoveLine(line, deltaXRatio, deltaYRatio));
+        _lastJapaneseAnalysisLinePointerXRatio = normalizedXRatio;
+        _lastJapaneseAnalysisLinePointerYRatio = normalizedYRatio;
+        RefreshJapaneseAnalysisLines();
+        return true;
+    }
+
+    /// <inheritdoc />
+    public bool CompleteJapaneseChartPointerInteraction(double chartX, double chartY)
+    {
+        var wasDragging = _isJapaneseAnalysisLineDragging;
+        _isJapaneseAnalysisLineDragging = false;
+
+        if (!wasDragging)
+        {
+            return IsAnalysisLineDrawingEnabled;
+        }
+
+        PersistJapaneseAnalysisLinesInBackground(GetSymbolForCandles(), SelectedCandleTimeframe, SelectedCandleDisplayPeriod, _japaneseAnalysisLineDefinitions.ToArray());
+        StatusMessage = _selectedJapaneseAnalysisLineId.HasValue
+            ? "分析ライン位置を更新しました。"
+            : StatusMessage;
+        OnAnalysisLineStateChanged();
+        return true;
+    }
+
+    /// <inheritdoc />
+    public IReadOnlyList<AutoAnalysisLineCandidate> GetAutoAnalysisLineCandidates()
+    {
+        var lines = CreateAutoAnalysisLines();
+        return lines
+            .Select((line, index) => new AutoAnalysisLineCandidate(
+                line.Id,
+                $"{ChartAnalysisLineStyleCatalog.GetDisplayName(line.LineType)} #{index + 1}",
+                $"始点({line.StartXRatio:P0}, {line.StartYRatio:P0}) / 終点({line.EndXRatio:P0}, {line.EndYRatio:P0})"))
+            .ToArray();
+    }
+
+    /// <inheritdoc />
+    public void AppendSelectedAutoAnalysisLines(IReadOnlyList<Guid> selectedLineIds)
+    {
+        ArgumentNullException.ThrowIfNull(selectedLineIds);
+
+        var idSet = new HashSet<Guid>(selectedLineIds);
+        var targetLines = CreateAutoAnalysisLines()
+            .Where(line => idSet.Contains(line.Id))
+            .ToArray();
+
+        if (targetLines.Length <= 0)
+        {
+            StatusMessage = "追加対象の自動分析ラインを選択してください。";
+            return;
+        }
+
+        IsAnalysisLineDrawingEnabled = false;
+        _hasPendingAnalysisLinePoint = false;
+        _selectedJapaneseAnalysisLineId = null;
+        var appendedCount = 0;
+        foreach (var line in targetLines)
+        {
+            if (_japaneseAnalysisLineDefinitions.Any(existing => AreEquivalentAnalysisLines(existing, line)))
+            {
+                continue;
+            }
+
+            _japaneseAnalysisLineDefinitions.Add(CloneAnalysisLine(line));
+            appendedCount++;
+        }
+
+        if (appendedCount <= 0)
+        {
+            StatusMessage = "追加対象の自動分析ラインはありません。";
+            OnAnalysisLineStateChanged();
+            return;
+        }
+
+        RefreshJapaneseAnalysisLines();
+        StatusMessage = $"分析ラインを {appendedCount} 本追加しました。";
+        OnAnalysisLineStateChanged();
+        PersistJapaneseAnalysisLinesInBackground(
+            GetSymbolForCandles(),
+            SelectedCandleTimeframe,
+            SelectedCandleDisplayPeriod,
+            _japaneseAnalysisLineDefinitions.ToArray());
     }
 
     private async Task LoadAnalysisAsync()
@@ -402,8 +746,14 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
 
     private async Task<MarketSnapshotModel> LoadSnapshotAsync()
     {
+        var previousSymbol = _currentSnapshotSymbol;
         var snapshot = await _marketSnapshotService.GetMarketSnapshotAsync(Symbol, CancellationToken.None);
         ApplySnapshot(snapshot);
+        if (!string.Equals(previousSymbol, snapshot.Symbol, StringComparison.OrdinalIgnoreCase))
+        {
+            ClearAnalysisLinesInternal();
+        }
+
         EvaluatePriceAlert(snapshot);
         return snapshot;
     }
@@ -446,6 +796,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
             CancellationToken.None);
 
         ReplaceCollection(JapaneseCandlesticks, chartViewData.Candlesticks);
+        await LoadPersistedJapaneseAnalysisLinesAsync(GetSymbolForCandles(), chartViewData.SuggestedAnalysisLines);
         UpdateCandlestickAxis(chartViewData);
     }
 
@@ -482,6 +833,7 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
             CancellationToken.None);
 
         ReplaceCollection(JapaneseCandlesticks, chartViewData.Candlesticks);
+        await LoadPersistedJapaneseAnalysisLinesAsync(symbol, chartViewData.SuggestedAnalysisLines);
         UpdateCandlestickAxis(chartViewData);
     }
 
@@ -519,6 +871,33 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     private void ToggleSidebar()
     {
         IsSidebarCollapsed = !IsSidebarCollapsed;
+    }
+
+    private void RemoveSelectedAnalysisLine()
+    {
+        if (!_selectedJapaneseAnalysisLineId.HasValue)
+        {
+            return;
+        }
+
+        _japaneseAnalysisLineDefinitions.RemoveAll(line => line.Id == _selectedJapaneseAnalysisLineId.Value);
+        _selectedJapaneseAnalysisLineId = null;
+        RefreshJapaneseAnalysisLines();
+        StatusMessage = _japaneseAnalysisLineDefinitions.Count <= 0
+            ? "選択中の分析ラインを削除しました。表示中の分析ラインはありません。"
+            : $"選択中の分析ラインを削除しました。現在 {_japaneseAnalysisLineDefinitions.Count} 本です。";
+        OnAnalysisLineStateChanged();
+        PersistJapaneseAnalysisLinesInBackground(GetSymbolForCandles(), SelectedCandleTimeframe, SelectedCandleDisplayPeriod, _japaneseAnalysisLineDefinitions.ToArray());
+    }
+
+    private void ClearAnalysisLines()
+    {
+        var symbol = GetSymbolForCandles();
+        var timeframe = SelectedCandleTimeframe;
+        var displayPeriod = SelectedCandleDisplayPeriod;
+        ClearAnalysisLinesInternal();
+        StatusMessage = "分析ラインを全消去しました。";
+        PersistJapaneseAnalysisLinesInBackground(symbol, timeframe, displayPeriod, Array.Empty<ChartAnalysisLine>());
     }
 
     private void HandleAnalysisFailure(Exception exception)
@@ -573,6 +952,8 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
         _allJapaneseIndicatorPanels.Clear();
         _allJapaneseIndicatorPanels.AddRange(chartViewData.IndicatorPanels);
         RefreshVisibleJapaneseChartIndicators();
+        RefreshJapaneseAnalysisLines();
+        RefreshPendingAnalysisPoint();
 
         OnPropertyChanged(nameof(JapaneseCandlestickMinPriceLabel));
         OnPropertyChanged(nameof(JapaneseCandlestickMidPriceLabel));
@@ -662,6 +1043,209 @@ public sealed class MainViewModel : ObservableObject, IDisposable, IMainWindowVi
     private static string FormatAxisLabel(decimal value)
     {
         return value <= 0m ? "-" : value.ToString("N2", CultureInfo.CurrentCulture);
+    }
+
+    private void RefreshJapaneseAnalysisLines()
+    {
+        ReplaceCollection(
+            JapaneseAnalysisLines,
+            _chartAnalysisLineService.CreateRenderItems(
+                _japaneseAnalysisLineDefinitions,
+                JapaneseCandlestickCanvasWidth,
+                AnalysisLineCanvasHeight,
+                _selectedJapaneseAnalysisLineId));
+        OnPropertyChanged(nameof(HasJapaneseAnalysisLines));
+    }
+
+    private void RefreshPendingAnalysisPoint()
+    {
+        if (!_hasPendingAnalysisLinePoint)
+        {
+            ReplaceCollection(JapanesePendingAnalysisPoints, Array.Empty<ChartAnalysisPointRenderItem>());
+            OnPropertyChanged(nameof(HasPendingJapaneseAnalysisPoint));
+            return;
+        }
+
+        ReplaceCollection(
+            JapanesePendingAnalysisPoints,
+            [
+                new ChartAnalysisPointRenderItem
+                {
+                    X = _pendingAnalysisLinePointXRatio * JapaneseCandlestickCanvasWidth,
+                    Y = _pendingAnalysisLinePointYRatio * AnalysisLineCanvasHeight
+                }
+            ]);
+        OnPropertyChanged(nameof(HasPendingJapaneseAnalysisPoint));
+    }
+
+    private void ClearAnalysisLinesInternal()
+    {
+        _japaneseAnalysisLineDefinitions.Clear();
+        _selectedJapaneseAnalysisLineId = null;
+        _isJapaneseAnalysisLineDragging = false;
+        _hasPendingAnalysisLinePoint = false;
+        RefreshJapaneseAnalysisLines();
+        OnAnalysisLineStateChanged();
+    }
+
+    private void OnAnalysisLineStateChanged()
+    {
+        OnPropertyChanged(nameof(IsAnalysisLineDrawingEnabled));
+        OnPropertyChanged(nameof(AnalysisLineActionText));
+        OnPropertyChanged(nameof(AnalysisLineQuickGuideText));
+        OnPropertyChanged(nameof(AnalysisLineStatusText));
+        OnPropertyChanged(nameof(HasSelectedJapaneseAnalysisLine));
+        RefreshPendingAnalysisPoint();
+        _removeSelectedAnalysisLineCommand.RaiseCanExecuteChanged();
+        _clearAnalysisLinesCommand.RaiseCanExecuteChanged();
+    }
+
+    private async Task LoadPersistedJapaneseAnalysisLinesAsync(
+        string symbol,
+        IReadOnlyList<ChartAnalysisLine> suggestedLines)
+    {
+        _suggestedJapaneseAnalysisLines.Clear();
+        _suggestedJapaneseAnalysisLines.AddRange(suggestedLines.Select(CloneAnalysisLine));
+
+        var persistedLines = await _chartAnalysisLineRepository.GetAsync(
+            symbol,
+            SelectedCandleTimeframe,
+            SelectedCandleDisplayPeriod,
+            CancellationToken.None);
+
+        _japaneseAnalysisLineDefinitions.Clear();
+        if (persistedLines.Count > 0)
+        {
+            _japaneseAnalysisLineDefinitions.AddRange(persistedLines);
+        }
+        else if (suggestedLines.Count > 0)
+        {
+            _japaneseAnalysisLineDefinitions.AddRange(suggestedLines);
+            PersistJapaneseAnalysisLinesInBackground(symbol, SelectedCandleTimeframe, SelectedCandleDisplayPeriod, suggestedLines);
+        }
+
+        if (_selectedJapaneseAnalysisLineId.HasValue
+            && !_japaneseAnalysisLineDefinitions.Exists(line => line.Id == _selectedJapaneseAnalysisLineId.Value))
+        {
+            _selectedJapaneseAnalysisLineId = null;
+        }
+
+    }
+
+    private void PersistJapaneseAnalysisLinesInBackground(
+        string symbol,
+        CandleTimeframe timeframe,
+        CandleDisplayPeriod displayPeriod,
+        IReadOnlyList<ChartAnalysisLine> lines)
+    {
+        PersistJapaneseAnalysisLinesAsync(symbol, timeframe, displayPeriod, lines);
+    }
+
+    private async void PersistJapaneseAnalysisLinesAsync(
+        string symbol,
+        CandleTimeframe timeframe,
+        CandleDisplayPeriod displayPeriod,
+        IReadOnlyList<ChartAnalysisLine> lines)
+    {
+        try
+        {
+            await _chartAnalysisLineRepository.SaveAsync(symbol, timeframe, displayPeriod, lines, CancellationToken.None);
+        }
+        catch (Exception ex)
+        {
+            _logger.LogError(ex, $"分析ライン保存に失敗しました。Symbol={symbol}, Timeframe={timeframe}, Period={displayPeriod}");
+        }
+    }
+
+    private bool TryNormalizeChartPoint(double chartX, double chartY, out double normalizedXRatio, out double normalizedYRatio)
+    {
+        normalizedXRatio = NormalizeCoordinate(chartX, JapaneseCandlestickCanvasWidth);
+        normalizedYRatio = NormalizeCoordinate(chartY, AnalysisLineCanvasHeight);
+        return JapaneseCandlestickCanvasWidth > 0d;
+    }
+
+    private double CalculateHitToleranceRatio()
+    {
+        return Math.Max(10d / Math.Max(JapaneseCandlestickCanvasWidth, 1d), 10d / AnalysisLineCanvasHeight);
+    }
+
+    private void ReplaceAnalysisLine(Guid lineId, Func<ChartAnalysisLine, ChartAnalysisLine> updater)
+    {
+        ArgumentNullException.ThrowIfNull(updater);
+
+        for (var index = 0; index < _japaneseAnalysisLineDefinitions.Count; index++)
+        {
+            if (_japaneseAnalysisLineDefinitions[index].Id != lineId)
+            {
+                continue;
+            }
+
+            _japaneseAnalysisLineDefinitions[index] = updater(_japaneseAnalysisLineDefinitions[index]);
+            return;
+        }
+    }
+
+    private ChartAnalysisLine? GetSelectedAnalysisLine()
+    {
+        return _selectedJapaneseAnalysisLineId.HasValue
+            ? _japaneseAnalysisLineDefinitions.FirstOrDefault(line => line.Id == _selectedJapaneseAnalysisLineId.Value)
+            : null;
+    }
+
+    private static IReadOnlyList<ChartAnalysisLineTypeOption> CreateAnalysisLineTypeOptions()
+    {
+        return
+        [
+            CreateAnalysisLineTypeOption(ChartAnalysisLineType.TrendLine),
+            CreateAnalysisLineTypeOption(ChartAnalysisLineType.SupportLine),
+            CreateAnalysisLineTypeOption(ChartAnalysisLineType.ResistanceLine)
+        ];
+    }
+
+    private static ChartAnalysisLineTypeOption CreateAnalysisLineTypeOption(ChartAnalysisLineType lineType)
+    {
+        return new ChartAnalysisLineTypeOption(
+            lineType,
+            ChartAnalysisLineStyleCatalog.GetDisplayName(lineType),
+            ChartAnalysisLineStyleCatalog.GetDescription(lineType),
+            ChartAnalysisLineStyleCatalog.GetStrokeColor(lineType),
+            ChartAnalysisLineStyleCatalog.GetStrokeDashArray(lineType));
+    }
+
+    private static string GetAnalysisLineTypeDisplayName(ChartAnalysisLineType lineType)
+    {
+        return ChartAnalysisLineStyleCatalog.GetDisplayName(lineType);
+    }
+
+    private static double NormalizeCoordinate(double value, double maximum)
+    {
+        if (maximum <= 0d || double.IsNaN(value) || double.IsInfinity(value))
+        {
+            return 0d;
+        }
+
+        return Math.Clamp(value / maximum, 0d, 1d);
+    }
+
+    private static ChartAnalysisLine CloneAnalysisLine(ChartAnalysisLine line)
+    {
+        return new ChartAnalysisLine(line.Id, line.LineType, line.StartXRatio, line.StartYRatio, line.EndXRatio, line.EndYRatio);
+    }
+
+    private ChartAnalysisLine[] CreateAutoAnalysisLines()
+    {
+        return _suggestedJapaneseAnalysisLines
+            .Select(CloneAnalysisLine)
+            .ToArray();
+    }
+
+    private static bool AreEquivalentAnalysisLines(ChartAnalysisLine left, ChartAnalysisLine right)
+    {
+        return left.LineType == right.LineType
+            && Math.Abs(left.StartXRatio - right.StartXRatio) < 0.0001d
+            && Math.Abs(left.StartYRatio - right.StartYRatio) < 0.0001d
+            && Math.Abs(left.EndXRatio - right.EndXRatio) < 0.0001d
+            && Math.Abs(left.EndYRatio - right.EndYRatio) < 0.0001d;
     }
 
     private static void ReplaceCollection<T>(ObservableCollection<T> target, IEnumerable<T> items)

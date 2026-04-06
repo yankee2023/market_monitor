@@ -1,4 +1,6 @@
 using MarketMonitor.Composition;
+using MarketMonitor.Features.Dashboard.Models;
+using MarketMonitor.Features.JapaneseStockChart.Models;
 
 namespace MarketMonitorTest;
 
@@ -23,12 +25,55 @@ public sealed class MainWindowLifecycleServiceTest
 
     private sealed class FakeMainWindowViewModel : IMainWindowViewModel
     {
+        public bool IsAnalysisLineDrawingEnabled => false;
+
         public bool InitializeCalled { get; private set; }
 
         public Task InitializeAsync()
         {
             InitializeCalled = true;
             return Task.CompletedTask;
+        }
+
+        public IReadOnlyList<ChartAnalysisLineTypeOption> GetManualAnalysisLineTypeOptions()
+        {
+            return Array.Empty<ChartAnalysisLineTypeOption>();
+        }
+
+        public void StartManualAnalysisLineDrawing(ChartAnalysisLineType lineType)
+        {
+        }
+
+        public void CancelManualAnalysisLineDrawing()
+        {
+        }
+
+        public void RegisterJapaneseChartClick(double chartX, double chartY)
+        {
+        }
+
+        public bool BeginJapaneseChartPointerInteraction(double chartX, double chartY)
+        {
+            return false;
+        }
+
+        public bool UpdateJapaneseChartPointerInteraction(double chartX, double chartY)
+        {
+            return false;
+        }
+
+        public bool CompleteJapaneseChartPointerInteraction(double chartX, double chartY)
+        {
+            return false;
+        }
+
+        public IReadOnlyList<AutoAnalysisLineCandidate> GetAutoAnalysisLineCandidates()
+        {
+            return Array.Empty<AutoAnalysisLineCandidate>();
+        }
+
+        public void AppendSelectedAutoAnalysisLines(IReadOnlyList<Guid> selectedLineIds)
+        {
         }
     }
 }

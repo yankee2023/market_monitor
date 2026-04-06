@@ -64,7 +64,10 @@ internal static class AppBootstrapper
         services.AddSingleton<IPriceHistoryRepository, SqlitePriceHistoryRepository>();
         services.AddSingleton<IPriceHistoryFeatureService, PriceHistoryFeatureService>();
         services.AddSingleton<IJapaneseCandleService, JapaneseCandleService>();
+        services.AddSingleton<IAutoChartAnalysisLineService, AutoChartAnalysisLineService>();
         services.AddSingleton<IJapaneseStockChartFeatureService, JapaneseStockChartFeatureService>();
+        services.AddSingleton<IChartAnalysisLineRepository, SqliteChartAnalysisLineRepository>();
+        services.AddSingleton<IChartAnalysisLineService, ChartAnalysisLineService>();
         services.AddSingleton<ISectorComparisonFeatureService, SectorComparisonFeatureService>();
         services.AddSingleton<IChartIndicatorSelectionService, ChartIndicatorSelectionService>();
         services.AddTransient<IDesktopNotificationService, WindowsDesktopNotificationService>();

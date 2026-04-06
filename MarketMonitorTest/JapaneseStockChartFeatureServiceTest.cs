@@ -23,7 +23,10 @@ public class JapaneseStockChartFeatureServiceTest
             new() { Date = new DateTime(2026, 3, 20), Open = 110m, High = 125m, Low = 105m, Close = 122m, Volume = 1100000L },
             new() { Date = new DateTime(2026, 4, 10), Open = 122m, High = 130m, Low = 118m, Close = 125m, Volume = 1200000L }
         };
-        var service = new JapaneseStockChartFeatureService(new FakeJapaneseCandleService(candles), new FakeLogger());
+        var service = new JapaneseStockChartFeatureService(
+            new FakeJapaneseCandleService(candles),
+            new AutoChartAnalysisLineService(),
+            new FakeLogger());
 
         // Act
         var result = await service.LoadAsync("7203.T", CandleTimeframe.Daily, CandleDisplayPeriod.OneMonth, 100, CancellationToken.None);
@@ -33,6 +36,7 @@ public class JapaneseStockChartFeatureServiceTest
         Assert.Equal(2, result.Candlesticks.Count);
         Assert.Equal(6, result.IndicatorDefinitions.Count);
         Assert.Empty(result.OverlayIndicatorSeries);
+        Assert.Empty(result.SuggestedAnalysisLines);
         Assert.Single(result.IndicatorPanels);
         Assert.Equal("volume", result.IndicatorPanels[0].PanelKey);
         Assert.True(result.CanvasWidth >= 320d);
@@ -56,7 +60,10 @@ public class JapaneseStockChartFeatureServiceTest
             })
             .ToList();
 
-        var service = new JapaneseStockChartFeatureService(new FakeJapaneseCandleService(candles), new FakeLogger());
+        var service = new JapaneseStockChartFeatureService(
+            new FakeJapaneseCandleService(candles),
+            new AutoChartAnalysisLineService(),
+            new FakeLogger());
 
         var result = await service.LoadAsync("7203.T", CandleTimeframe.Daily, CandleDisplayPeriod.OneMonth, 100, CancellationToken.None);
 
@@ -64,6 +71,7 @@ public class JapaneseStockChartFeatureServiceTest
         Assert.Contains(result.IndicatorPanels, item => item.PanelKey == "volume");
         Assert.Contains(result.IndicatorPanels, item => item.PanelKey == "macd");
         Assert.Contains(result.IndicatorPanels, item => item.PanelKey == "rsi");
+        Assert.Equal(3, result.SuggestedAnalysisLines.Count);
     }
 
     /// <summary>
@@ -74,7 +82,10 @@ public class JapaneseStockChartFeatureServiceTest
     public async Task LoadAsync_ReturnsEmpty_ForNonTokyoSymbol()
     {
         // Arrange
-        var service = new JapaneseStockChartFeatureService(new FakeJapaneseCandleService([]), new FakeLogger());
+        var service = new JapaneseStockChartFeatureService(
+            new FakeJapaneseCandleService([]),
+            new AutoChartAnalysisLineService(),
+            new FakeLogger());
 
         // Act
         var result = await service.LoadAsync("IBM", CandleTimeframe.Daily, CandleDisplayPeriod.OneMonth, 100, CancellationToken.None);
@@ -84,6 +95,7 @@ public class JapaneseStockChartFeatureServiceTest
         Assert.Empty(result.Candlesticks);
         Assert.Empty(result.IndicatorDefinitions);
         Assert.Empty(result.OverlayIndicatorSeries);
+        Assert.Empty(result.SuggestedAnalysisLines);
         Assert.Empty(result.IndicatorPanels);
     }
 

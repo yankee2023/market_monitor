@@ -1,4 +1,5 @@
 using System.Globalization;
+using MarketMonitor.Features.Dashboard.Models;
 using MarketMonitor.Features.Dashboard.ViewModels;
 using MarketMonitor.Features.JapaneseStockChart.Models;
 using MarketMonitor.Features.JapaneseStockChart.Services;
@@ -63,6 +64,7 @@ public class MainViewModelTest
                 [candle],
                 CreateIndicatorDefinitions(),
                 CreateOverlaySeries(),
+                Array.Empty<ChartAnalysisLine>(),
                 CreateIndicatorPanels(),
                 205m,
                 220m,
@@ -73,7 +75,8 @@ public class MainViewModelTest
             japaneseStockChartFeatureService,
             new FakeSectorComparisonFeatureService(),
             new FakeLogger(),
-            new FakeDesktopNotificationService());
+            new FakeDesktopNotificationService(),
+            chartAnalysisLineRepository: new FakeChartAnalysisLineRepository());
 
         await viewModel.InitializeAsync();
 
@@ -111,7 +114,8 @@ public class MainViewModelTest
             new FakeJapaneseStockChartFeatureService(),
             new FakeSectorComparisonFeatureService(),
             new FakeLogger(),
-            new FakeDesktopNotificationService());
+            new FakeDesktopNotificationService(),
+            chartAnalysisLineRepository: new FakeChartAnalysisLineRepository());
 
         await viewModel.InitializeAsync();
 
@@ -193,7 +197,7 @@ public class MainViewModelTest
 
         Assert.Equal("7203", viewModel.Symbol);
         Assert.False(viewModel.IsSidebarCollapsed);
-        Assert.Equal("補助ペインを閉じる", viewModel.SidebarToggleText);
+        Assert.Equal("詳細情報を隠す", viewModel.SidebarToggleText);
     }
 
     /// <summary>
@@ -208,13 +212,13 @@ public class MainViewModelTest
 
         Assert.True(viewModel.IsSidebarCollapsed);
         Assert.False(viewModel.IsSidebarVisible);
-        Assert.Equal("補助ペインを開く", viewModel.SidebarToggleText);
+        Assert.Equal("詳細情報を表示", viewModel.SidebarToggleText);
 
         viewModel.ToggleSidebarCommand.Execute(null);
 
         Assert.False(viewModel.IsSidebarCollapsed);
         Assert.True(viewModel.IsSidebarVisible);
-        Assert.Equal("補助ペインを閉じる", viewModel.SidebarToggleText);
+        Assert.Equal("詳細情報を隠す", viewModel.SidebarToggleText);
     }
 
     /// <summary>
@@ -250,11 +254,189 @@ public class MainViewModelTest
         Assert.Equal(2, viewModel.VisibleJapaneseIndicatorPanels.Count);
     }
 
+    /// <summary>
+    /// 分析ライン描画モードで 2 回クリックすると分析ラインが追加されることをテスト。
+    /// </summary>
+    [Fact]
+    public async Task RegisterJapaneseChartClick_AddsAnalysisLine_AfterSecondPoint()
+    {
+        var repository = new FakeChartAnalysisLineRepository();
+        var viewModel = CreateViewModel(chartAnalysisLineRepository: repository);
+        await viewModel.InitializeAsync();
+
+        viewModel.StartManualAnalysisLineDrawing(ChartAnalysisLineType.SupportLine);
+        viewModel.RegisterJapaneseChartClick(32d, 52d);
+        Assert.True(viewModel.HasPendingJapaneseAnalysisPoint);
+        viewModel.RegisterJapaneseChartClick(192d, 156d);
+
+        Assert.False(viewModel.IsAnalysisLineDrawingEnabled);
+        Assert.False(viewModel.HasPendingJapaneseAnalysisPoint);
+        Assert.True(viewModel.HasJapaneseAnalysisLines);
+        var line = Assert.Single(viewModel.JapaneseAnalysisLines);
+        Assert.Equal("分析ライン 1 本を表示中です。選択中: 支持線。ドラッグで位置調整できます。", viewModel.AnalysisLineStatusText);
+        Assert.Equal(32d, line.X1, 3);
+        Assert.Equal(52d, line.Y1, 3);
+        Assert.Equal(192d, line.X2, 3);
+        Assert.Equal(156d, line.Y2, 3);
+        Assert.Equal("8 4", line.StrokeDashArray);
+        var persisted = await repository.GetAsync("7203.T", CandleTimeframe.Daily, CandleDisplayPeriod.OneMonth, CancellationToken.None);
+        Assert.Single(persisted);
+        Assert.Equal(ChartAnalysisLineType.SupportLine, persisted[0].LineType);
+    }
+
+    /// <summary>
+    /// 分析ライン選択後にドラッグすると位置を移動できることをテスト。
+    /// </summary>
+    [Fact]
+    public async Task PointerInteraction_MovesSelectedAnalysisLine()
+    {
+        var viewModel = CreateViewModel(chartAnalysisLineRepository: new FakeChartAnalysisLineRepository());
+        await viewModel.InitializeAsync();
+        viewModel.StartManualAnalysisLineDrawing(ChartAnalysisLineType.TrendLine);
+        viewModel.RegisterJapaneseChartClick(32d, 52d);
+        viewModel.RegisterJapaneseChartClick(192d, 156d);
+
+        var beginHandled = viewModel.BeginJapaneseChartPointerInteraction(100d, 104d);
+        var updateHandled = viewModel.UpdateJapaneseChartPointerInteraction(132d, 130d);
+        var completeHandled = viewModel.CompleteJapaneseChartPointerInteraction(132d, 130d);
+
+        Assert.True(beginHandled);
+        Assert.True(updateHandled);
+        Assert.True(completeHandled);
+        var moved = Assert.Single(viewModel.JapaneseAnalysisLines);
+        Assert.Equal(64d, moved.X1, 3);
+        Assert.Equal(78d, moved.Y1, 3);
+        Assert.Equal(224d, moved.X2, 3);
+        Assert.Equal(182d, moved.Y2, 3);
+        Assert.True(viewModel.HasSelectedJapaneseAnalysisLine);
+    }
+
+    /// <summary>
+    /// 初期化時に保存済みの分析ラインが読み込まれることをテスト。
+    /// </summary>
+    [Fact]
+    public async Task InitializeAsync_LoadsPersistedAnalysisLines()
+    {
+        var repository = new FakeChartAnalysisLineRepository();
+        await repository.SaveAsync(
+            "7203.T",
+            CandleTimeframe.Daily,
+            CandleDisplayPeriod.OneMonth,
+            [new ChartAnalysisLine(Guid.NewGuid(), ChartAnalysisLineType.ResistanceLine, 0.10d, 0.20d, 0.90d, 0.20d)],
+            CancellationToken.None);
+        var viewModel = CreateViewModel(chartAnalysisLineRepository: repository);
+
+        await viewModel.InitializeAsync();
+
+        var line = Assert.Single(viewModel.JapaneseAnalysisLines);
+        Assert.Equal("10 4 2 4", line.StrokeDashArray);
+        Assert.True(viewModel.HasJapaneseAnalysisLines);
+    }
+
+    /// <summary>
+    /// 保存済みラインがない場合は自動生成ラインが採用されることをテスト。
+    /// </summary>
+    [Fact]
+    public async Task InitializeAsync_UsesSuggestedAnalysisLines_WhenNoPersistedLinesExist()
+    {
+        var suggestedLines = new[]
+        {
+            new ChartAnalysisLine(Guid.NewGuid(), ChartAnalysisLineType.TrendLine, 0d, 0.20d, 1d, 0.45d),
+            new ChartAnalysisLine(Guid.NewGuid(), ChartAnalysisLineType.SupportLine, 0d, 0.80d, 1d, 0.80d),
+            new ChartAnalysisLine(Guid.NewGuid(), ChartAnalysisLineType.ResistanceLine, 0d, 0.18d, 1d, 0.18d)
+        };
+        var repository = new FakeChartAnalysisLineRepository();
+        var viewModel = CreateViewModel(
+            japaneseStockChartFeatureService: new FakeJapaneseStockChartFeatureService(CreateChartViewData(suggestedLines)),
+            chartAnalysisLineRepository: repository);
+
+        await viewModel.InitializeAsync();
+
+        Assert.Equal(3, viewModel.JapaneseAnalysisLines.Count);
+        var persisted = await repository.GetAsync("7203.T", CandleTimeframe.Daily, CandleDisplayPeriod.OneMonth, CancellationToken.None);
+        Assert.Equal(3, persisted.Count);
+    }
+
+    /// <summary>
+    /// 自動生成候補選択で既存ラインを残したまま選択した線だけ追加できることをテスト。
+    /// </summary>
+    [Fact]
+    public async Task AppendSelectedAutoAnalysisLines_AppendsSelectedLines_WithoutRemovingExistingLine()
+    {
+        var suggestedLines = new[]
+        {
+            new ChartAnalysisLine(Guid.NewGuid(), ChartAnalysisLineType.TrendLine, 0d, 0.20d, 1d, 0.40d),
+            new ChartAnalysisLine(Guid.NewGuid(), ChartAnalysisLineType.SupportLine, 0d, 0.75d, 1d, 0.75d),
+            new ChartAnalysisLine(Guid.NewGuid(), ChartAnalysisLineType.ResistanceLine, 0d, 0.18d, 1d, 0.18d)
+        };
+        var repository = new FakeChartAnalysisLineRepository();
+        await repository.SaveAsync(
+            "7203.T",
+            CandleTimeframe.Daily,
+            CandleDisplayPeriod.OneMonth,
+            [new ChartAnalysisLine(Guid.NewGuid(), ChartAnalysisLineType.TrendLine, 0.10d, 0.20d, 0.80d, 0.45d)],
+            CancellationToken.None);
+        var viewModel = CreateViewModel(
+            japaneseStockChartFeatureService: new FakeJapaneseStockChartFeatureService(CreateChartViewData(suggestedLines)),
+            chartAnalysisLineRepository: repository);
+
+        await viewModel.InitializeAsync();
+        var selectedIds = suggestedLines
+            .Where(item => item.LineType != ChartAnalysisLineType.TrendLine)
+            .Select(item => item.Id)
+            .ToArray();
+
+        viewModel.AppendSelectedAutoAnalysisLines(selectedIds);
+
+        Assert.Equal(3, viewModel.JapaneseAnalysisLines.Count);
+        Assert.Equal("分析ラインを 2 本追加しました。", viewModel.StatusMessage);
+        var persisted = await repository.GetAsync("7203.T", CandleTimeframe.Daily, CandleDisplayPeriod.OneMonth, CancellationToken.None);
+        Assert.Equal(3, persisted.Count);
+        Assert.Equal(2, persisted.Count(item => item.LineType != ChartAnalysisLineType.TrendLine));
+    }
+
+    /// <summary>
+    /// 銘柄切替時に既存の分析ラインがクリアされることをテスト。
+    /// </summary>
+    [Fact]
+    public async Task ApplySymbolCommand_ClearsAnalysisLines_WhenSymbolChanges()
+    {
+        var snapshotService = new SequencedMarketSnapshotService(
+            new MarketSnapshotModel
+            {
+                Symbol = "7203.T",
+                CompanyName = "トヨタ自動車",
+                StockPrice = 200m,
+                StockUpdatedAt = DateTimeOffset.Now
+            },
+            new MarketSnapshotModel
+            {
+                Symbol = "6758.T",
+                CompanyName = "ソニーグループ",
+                StockPrice = 300m,
+                StockUpdatedAt = DateTimeOffset.Now.AddMinutes(1)
+            });
+        var viewModel = CreateViewModel(marketSnapshotService: snapshotService);
+        await viewModel.InitializeAsync();
+        viewModel.StartManualAnalysisLineDrawing(ChartAnalysisLineType.TrendLine);
+        viewModel.RegisterJapaneseChartClick(32d, 80d);
+        viewModel.RegisterJapaneseChartClick(210d, 160d);
+
+        viewModel.Symbol = "6758";
+        viewModel.ApplySymbolCommand.Execute(null);
+        await snapshotService.WaitForCallCountAsync(2);
+
+        Assert.False(viewModel.HasJapaneseAnalysisLines);
+        Assert.Empty(viewModel.JapaneseAnalysisLines);
+    }
+
     private static MainViewModel CreateViewModel(
         IMarketSnapshotService? marketSnapshotService = null,
         IPriceHistoryFeatureService? priceHistoryFeatureService = null,
         IJapaneseStockChartFeatureService? japaneseStockChartFeatureService = null,
-        IAppLogger? logger = null)
+        IAppLogger? logger = null,
+        IChartAnalysisLineRepository? chartAnalysisLineRepository = null,
+        IChartAnalysisLineService? chartAnalysisLineService = null)
     {
         return new MainViewModel(
             marketSnapshotService ?? new FakeMarketSnapshotService(),
@@ -262,7 +444,9 @@ public class MainViewModelTest
             japaneseStockChartFeatureService ?? new FakeJapaneseStockChartFeatureService(),
             new FakeSectorComparisonFeatureService(),
             logger ?? new FakeLogger(),
-            new FakeDesktopNotificationService());
+            new FakeDesktopNotificationService(),
+            chartAnalysisLineRepository: chartAnalysisLineRepository ?? new FakeChartAnalysisLineRepository(),
+            chartAnalysisLineService: chartAnalysisLineService);
     }
 
     private static IReadOnlyList<ChartIndicatorDefinition> CreateIndicatorDefinitions()
@@ -271,7 +455,7 @@ public class MainViewModelTest
         [
             new ChartIndicatorDefinition("ma5", "MA5", ChartIndicatorPlacement.OverlayPriceChart, "#F59E0B", true, 10),
             new ChartIndicatorDefinition("ma25", "MA25", ChartIndicatorPlacement.OverlayPriceChart, "#10B981", true, 20),
-            new ChartIndicatorDefinition("ma75", "MA75", ChartIndicatorPlacement.OverlayPriceChart, "#334155", true, 30),
+            new ChartIndicatorDefinition("ma75", "MA75", ChartIndicatorPlacement.OverlayPriceChart, "#0EA5E9", true, 30),
             new ChartIndicatorDefinition("volume", "出来高", ChartIndicatorPlacement.SecondaryPanel, "#64748B", true, 40),
             new ChartIndicatorDefinition("macd", "MACD", ChartIndicatorPlacement.SecondaryPanel, "#B91C1C", true, 50),
             new ChartIndicatorDefinition("rsi", "RSI", ChartIndicatorPlacement.SecondaryPanel, "#7C3AED", true, 60)
@@ -312,11 +496,37 @@ public class MainViewModelTest
                 Placement = ChartIndicatorPlacement.OverlayPriceChart,
                 DisplayOrder = 30,
                 Points = "17,140 51,130",
-                StrokeColor = "#334155",
+                StrokeColor = "#0EA5E9",
                 StrokeThickness = 2.7d,
-                StrokeDashArray = "8 4"
+                StrokeDashArray = string.Empty
             }
         ];
+    }
+
+    private static JapaneseStockChartViewData CreateChartViewData(IReadOnlyList<ChartAnalysisLine>? suggestedAnalysisLines = null)
+    {
+        return new JapaneseStockChartViewData(
+            true,
+            [
+                new CandlestickRenderItem
+                {
+                    Label = "04/01",
+                    WickTop = 12,
+                    WickHeight = 40,
+                    BodyTop = 18,
+                    BodyHeight = 16,
+                    BodyColor = "#00AA00",
+                    WickColor = "#00AA00",
+                    VolumeText = "1,200,000"
+                }
+            ],
+            CreateIndicatorDefinitions(),
+            CreateOverlaySeries(),
+            suggestedAnalysisLines ?? Array.Empty<ChartAnalysisLine>(),
+            CreateIndicatorPanels(),
+            190m,
+            210m,
+            320d);
     }
 
     private static IReadOnlyList<IndicatorPanelRenderData> CreateIndicatorPanels()
@@ -442,6 +652,38 @@ public class MainViewModelTest
         }
     }
 
+    private sealed class SequencedMarketSnapshotService : IMarketSnapshotService
+    {
+        private readonly MarketSnapshotModel[] _snapshots;
+        private int _callCount;
+
+        public SequencedMarketSnapshotService(params MarketSnapshotModel[] snapshots)
+        {
+            _snapshots = snapshots;
+        }
+
+        public Task<MarketSnapshotModel> GetMarketSnapshotAsync(string symbol, CancellationToken cancellationToken)
+        {
+            var index = Math.Min(_callCount, _snapshots.Length - 1);
+            _callCount++;
+            return Task.FromResult(_snapshots[index]);
+        }
+
+        public async Task WaitForCallCountAsync(int expectedCount)
+        {
+            var start = DateTime.UtcNow;
+            while (_callCount < expectedCount)
+            {
+                if (DateTime.UtcNow - start > TimeSpan.FromSeconds(1))
+                {
+                    throw new TimeoutException($"スナップショット取得回数が {expectedCount} 回に到達しませんでした。");
+                }
+
+                await Task.Yield();
+            }
+        }
+    }
+
     private sealed class FakePriceHistoryFeatureService : IPriceHistoryFeatureService
     {
         private readonly PriceHistoryViewData _viewData;
@@ -481,27 +723,7 @@ public class MainViewModelTest
 
         public FakeJapaneseStockChartFeatureService(JapaneseStockChartViewData? viewData = null)
         {
-            _viewData = viewData ?? new JapaneseStockChartViewData(
-                true,
-                [
-                    new CandlestickRenderItem
-                    {
-                        Label = "04/01",
-                        WickTop = 12,
-                        WickHeight = 40,
-                        BodyTop = 18,
-                        BodyHeight = 16,
-                        BodyColor = "#00AA00",
-                        WickColor = "#00AA00",
-                        VolumeText = "1,200,000"
-                    }
-                ],
-                CreateIndicatorDefinitions(),
-                CreateOverlaySeries(),
-                CreateIndicatorPanels(),
-                190m,
-                210m,
-                320d);
+            _viewData = viewData ?? CreateChartViewData();
         }
 
         public string LastSymbol { get; private set; } = string.Empty;
@@ -537,6 +759,46 @@ public class MainViewModelTest
             LastDisplayPeriod = displayPeriod;
             _nextCallCompletionSource?.TrySetResult();
             return Task.FromResult(_viewData);
+        }
+    }
+
+    private sealed class FakeChartAnalysisLineRepository : IChartAnalysisLineRepository
+    {
+        private readonly Dictionary<string, List<ChartAnalysisLine>> _store = new(StringComparer.OrdinalIgnoreCase);
+
+        public Task<IReadOnlyList<ChartAnalysisLine>> GetAsync(
+            string symbol,
+            CandleTimeframe timeframe,
+            CandleDisplayPeriod displayPeriod,
+            CancellationToken cancellationToken)
+        {
+            var key = CreateKey(symbol, timeframe, displayPeriod);
+            return Task.FromResult<IReadOnlyList<ChartAnalysisLine>>(
+                _store.TryGetValue(key, out var lines)
+                    ? lines.Select(Clone).ToArray()
+                    : Array.Empty<ChartAnalysisLine>());
+        }
+
+        public Task SaveAsync(
+            string symbol,
+            CandleTimeframe timeframe,
+            CandleDisplayPeriod displayPeriod,
+            IReadOnlyList<ChartAnalysisLine> lines,
+            CancellationToken cancellationToken)
+        {
+            var key = CreateKey(symbol, timeframe, displayPeriod);
+            _store[key] = lines.Select(Clone).ToList();
+            return Task.CompletedTask;
+        }
+
+        private static string CreateKey(string symbol, CandleTimeframe timeframe, CandleDisplayPeriod displayPeriod)
+        {
+            return $"{symbol.ToUpperInvariant()}::{timeframe}::{displayPeriod}";
+        }
+
+        private static ChartAnalysisLine Clone(ChartAnalysisLine line)
+        {
+            return new ChartAnalysisLine(line.Id, line.LineType, line.StartXRatio, line.StartYRatio, line.EndXRatio, line.EndYRatio);
         }
     }
 

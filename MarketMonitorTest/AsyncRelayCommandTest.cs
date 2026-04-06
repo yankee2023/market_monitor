@@ -5,8 +5,14 @@ using Xunit;
 
 namespace MarketMonitorTest;
 
+/// <summary>
+/// AsyncRelayCommand の実行状態遷移と実行可否判定を検証するテスト。
+/// </summary>
 public sealed class AsyncRelayCommandTest
 {
+    /// <summary>
+    /// 実行開始から完了までに CanExecuteChanged が発火し、完了後に実行可能へ戻ることを確認する。
+    /// </summary>
     [Fact]
     public async Task ExecuteAsync_RaisesCanExecuteChangedAroundExecution()
     {
@@ -35,6 +41,9 @@ public sealed class AsyncRelayCommandTest
         Assert.True(command.CanExecute(null));
     }
 
+    /// <summary>
+    /// 実行可否デリゲートが false を返す場合、CanExecute が false になることを確認する。
+    /// </summary>
     [Fact]
     public void CanExecute_WhenPredicateReturnsFalse_ReturnsFalse()
     {
@@ -45,6 +54,9 @@ public sealed class AsyncRelayCommandTest
         Assert.False(result);
     }
 
+    /// <summary>
+    /// Execute 呼び出しが同期的な例外を投げずに処理開始できることを確認する。
+    /// </summary>
     [Fact]
     public void Execute_DoesNotThrowSynchronously()
     {

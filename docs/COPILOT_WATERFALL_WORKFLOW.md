@@ -6,7 +6,7 @@
 - 仕様書のみを入力として設計書を生成する
 - 設計書のみを入力として実装を生成する
 
-本書は [SPECIFICATION.md](../SPECIFICATION.md) と [DESIGN.md](../DESIGN.md) の生成規約を、実際の入力テンプレートへ落とし込んだものである。
+本書は [SPECIFICATION.md](SPECIFICATION.md) と [DESIGN.md](DESIGN.md) の生成規約を、実際の入力テンプレートへ落とし込んだものである。
 
 ---
 
@@ -69,7 +69,7 @@
 ---
 
 ## 7. このリポジトリでの正本
-- 要件の正本: [SPECIFICATION.md](../SPECIFICATION.md)
-- 設計の正本: [DESIGN.md](../DESIGN.md)
+- 要件の正本: [SPECIFICATION.md](SPECIFICATION.md)
+- 設計の正本: [DESIGN.md](DESIGN.md)
 - 実装の正本: [MarketMonitor](../MarketMonitor)
 - 生成手順の正本: [docs/COPILOT_WATERFALL_WORKFLOW.md](COPILOT_WATERFALL_WORKFLOW.md)

@@ -1,6 +1,7 @@
 using System.Windows;
 using System.Runtime.CompilerServices;
 
+// WPF テーマ辞書の解決先とテスト公開範囲を定義するアセンブリ設定。
 [assembly: ThemeInfo(
     ResourceDictionaryLocation.None,
     // テーマ固有のリソースディクショナリの配置先。

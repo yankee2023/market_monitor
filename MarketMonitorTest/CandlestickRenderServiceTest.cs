@@ -109,4 +109,29 @@ public sealed class CandlestickRenderServiceTest
         Assert.Contains("RSI", rsiPanel.HoverItems[^1].TooltipText);
         Assert.True(result.CanvasWidth >= 320d);
     }
+
+    /// <summary>
+    /// MA75 が実線かつ専用色で描画されることをテスト。
+    /// </summary>
+    [Fact]
+    public void Build_UsesSolidDistinctStyle_ForMa75()
+    {
+        var candles = Enumerable.Range(0, 90)
+            .Select(index => new JapaneseCandleEntry
+            {
+                Date = new DateTime(2026, 1, 1).AddDays(index),
+                Open = 100m + index,
+                High = 103m + index,
+                Low = 98m + index,
+                Close = 101m + (index % 6),
+                Volume = 1500000L + index * 2500L
+            })
+            .ToList();
+
+        var result = CandlestickRenderService.Build(candles);
+
+        var ma75 = Assert.Single(result.OverlayIndicatorSeries, item => item.IndicatorKey == "ma75");
+        Assert.Equal("#0EA5E9", ma75.StrokeColor);
+        Assert.Equal(string.Empty, ma75.StrokeDashArray);
+    }
 }
