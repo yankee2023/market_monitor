@@ -25,6 +25,7 @@
 | Package | Version | License |
 | --- | --- | --- |
 | coverlet.collector | 6.0.4 | MIT |
+| coverlet.msbuild | 6.0.4 | MIT |
 | Microsoft.NET.Test.Sdk | 17.14.1 | MIT |
 | xunit | 2.9.3 | Apache-2.0 |
 | xunit.runner.visualstudio | 3.1.4 | Apache-2.0 |

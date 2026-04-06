@@ -523,9 +523,33 @@
 | stock_price | REAL | 不可 | なし | 株価 |
 | recorded_at | TEXT | 不可 | なし | ISO 8601 形式の時刻 |
 
-#### 7.2.2 ファイル配置
-- DB ファイル: data/market_history.db
-- ログファイル: logs/app-.log
+#### 7.2.2 analysis_lines テーブル
+| カラム名 | 型 | NULL | 制約 | 説明 |
+| --- | --- | --- | --- | --- |
+| symbol | TEXT | 不可 | PK part 1 | 銘柄シンボル |
+| timeframe | INTEGER | 不可 | PK part 2 | 足種別（0: 日足、1: 週足） |
+| display_period | INTEGER | 不可 | PK part 3 | 表示期間（0: 1か月、1: 3か月、2: 6か月、3: 1年） |
+| line_id | TEXT | 不可 | PK part 4 | 分析ラインの一意識別子（GUID） |
+| line_type | INTEGER | 不可 | なし | 線種別（0: トレンドライン、1: 支持線、2: 抵抗線） |
+| start_x_ratio | REAL | 不可 | なし | 始点 X 座標比率（0.0 ～ 1.0） |
+| start_y_ratio | REAL | 不可 | なし | 始点 Y 座標比率（0.0 ～ 1.0） |
+| end_x_ratio | REAL | 不可 | なし | 終点 X 座標比率（0.0 ～ 1.0） |
+| end_y_ratio | REAL | 不可 | なし | 終点 Y 座標比率（0.0 ～ 1.0） |
+| sort_order | INTEGER | 不可 | なし | 描画順序（昇順） |
+
+#### 7.2.3 ファイル配置
+| 用途 | ファイル | 説明 |
+| --- | --- | --- |
+| 価格履歴 | data/market_history.db | 日本株の価格スナップショット履歴を保存 |
+| 分析ライン | data/analysis_lines.db | チャート上の描画ラインメタデータを保存 |
+| ログ | logs/app-.log | アプリケーション実行ログ（日次ローテーション） |
+
+#### 7.2.4 永続化ポリシー
+- **タイムスタンプ形式**: ISO 8601 形式（yyyy-MM-ddTHH:mm:ss.fff+00:00）
+- **座標正規化**: チャート座標はキャンバス幅・高さに対する比率（0.0 ～ 1.0）で保存
+- **スキーマ移行**: 旧スキーマに exchange_rate 列が存在する場合、自動移行して新スキーマへコピー
+- **トランザクション**: テーブル作成と移行はトランザクション内で実行
+- **キャッシュ**: price_history は現在値のレート制限時にメモリキャッシュから読切を試みる
 
 ---
 

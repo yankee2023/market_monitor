@@ -10,8 +10,8 @@
 ---
 
 ## 📚 ドキュメント構成
-- [SPECIFICATION.md](SPECIFICATION.md): 仕様書。要件、画面仕様、データ仕様、異常系、設計生成規約、実装生成規約を定義します。
-- [DESIGN.md](DESIGN.md): 設計書。仕様書を受けて、責務分割、コンポーネント構成、フェーズ別の設計内容を定義します。
+- [docs/SPECIFICATION.md](docs/SPECIFICATION.md): 仕様書。要件、画面仕様、データ仕様、異常系、設計生成規約、実装生成規約を定義します。
+- [docs/DESIGN.md](docs/DESIGN.md): 設計書。仕様書を受けて、責務分割、コンポーネント構成、フェーズ別の設計内容を定義します。
 - [docs/COPILOT_WATERFALL_WORKFLOW.md](docs/COPILOT_WATERFALL_WORKFLOW.md): Copilot による仕様→設計→実装の生成手順です。
 - [templates/DESIGN_FROM_SPEC_TEMPLATE.md](templates/DESIGN_FROM_SPEC_TEMPLATE.md): 仕様書から設計書を生成するための入力テンプレートです。
 - [templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md](templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md): 設計書から実装を生成するための入力テンプレートです。
@@ -78,6 +78,61 @@
 - 分析ラインは銘柄、足種別、表示期間ごとに保存され、再表示時に復元されます。
 - 各下段指標パネルは折りたたみ可能で、高さを個別に調整できます。
 - 右ペイン全体は開閉でき、閉じた場合はチャート領域が全幅へ広がります。開いている場合もウィンドウ拡大・縮小に合わせて追従し、補助情報の文字が欠けない幅を確保します。
+
+## 💾 データベース構成
+
+### 概要
+本アプリケーションはローカルファイルシステム上の SQLite データベースを使用して、価格履歴と分析ラインメタデータを永続化します。
+
+### データベースファイル
+
+| ファイル | 用途 | テーブル |
+| :--- | :--- | :--- |
+| `data/market_history.db` | 日本株の価格スナップショット履歴を保存 | `price_history` |
+| `data/analysis_lines.db` | チャート上の描画ラインメタデータを保存 | `analysis_lines` |
+
+### テーブルスキーマ
+
+#### price_history テーブル
+```sql
+CREATE TABLE price_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,           -- 正規化済みシンボル（例: 7203.T）
+    stock_price REAL NOT NULL,      -- 保存時点での株価
+    recorded_at TEXT NOT NULL       -- ISO 8601 形式の時刻
+);
+```
+
+#### analysis_lines テーブル
+```sql
+CREATE TABLE analysis_lines (
+    symbol TEXT NOT NULL,           -- 正規化済みシンボル
+    timeframe INTEGER NOT NULL,     -- 足種別（0: 日足、1: 週足）
+    display_period INTEGER NOT NULL,-- 表示期間（0: 1か月、1: 3か月、2: 6か月、3: 1年）
+    line_id TEXT NOT NULL,          -- 分析ラインの一意識別子（GUID）
+    line_type INTEGER NOT NULL,     -- 線種別（0: トレンドライン、1: 支持線、2: 抵抗線）
+    start_x_ratio REAL NOT NULL,    -- 始点 X 座標比率（0.0 ～ 1.0）
+    start_y_ratio REAL NOT NULL,    -- 始点 Y 座標比率（0.0 ～ 1.0）
+    end_x_ratio REAL NOT NULL,      -- 終点 X 座標比率（0.0 ～ 1.0）
+    end_y_ratio REAL NOT NULL,      -- 終点 Y 座標比率（0.0 ～ 1.0）
+    sort_order INTEGER NOT NULL,    -- 描画順序（昇順）
+    PRIMARY KEY(symbol, timeframe, display_period, line_id)
+);
+```
+
+### データ永続化ポリシー
+
+- **タイムスタンプ形式**: ISO 8601 形式（`yyyy-MM-ddTHH:mm:ss.fff+00:00`）で保存
+- **座標正規化**: チャート座標はキャンバス幅・高さに対する比率（0.0 ～ 1.0）で保存し、画面リサイズ時に再計算
+- **スキーマ移行**: 旧スキーマに `exchange_rate` 列が存在する場合、自動移行して新スキーマへコピー
+- **トランザクション**: テーブル作成とスキーマ移行はトランザクション内で実行
+- **キャッシュ**: 価格履歴はメモリキャッシュから読み込みを試み、レート制限時にフォールバック
+
+### 詳細設計
+
+DB設計の詳細については、以下のドキュメントを参照してください：
+- 要件: [docs/SPECIFICATION.md](docs/SPECIFICATION.md#7-データ仕様)
+- 実装設計: [docs/DESIGN.md](docs/DESIGN.md#7-永続化設計)
 - 補助ペインの銘柄サマリーと同業比較カードには市場区分を表示し、プライム、スタンダード、グロースを即座に判別できます。
 - サポート対象の市場区分は MarketMonitor/market-settings.json で切り替えできます。
 
@@ -105,10 +160,45 @@
 
 ---
 
-## 外部ライブラリライセンス
-- 本プロジェクトで利用している主要な外部ライブラリとライセンスは [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) に記載しています。
-- [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) には、ライセンス一覧だけでなく、MITやApache-2.0などの取り扱いルールも記載しています。
-- 外部ライブラリを追加または更新した場合は、README.mdの記述とあわせて [THIRD_PARTY_LICENSES.md](THIRD_PARTY_LICENSES.md) も更新してください。
+## ライセンス
+
+### オープンソースライセンス
+- 本プロジェクトで利用している主要な外部ライブラリとライセンスは [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md) に記載しています。
+- [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md) には、ライセンス一覧だけでなく、MITやApache-2.0などの取り扱いルールも記載しています。
+- 外部ライブラリを追加または更新した場合は、README.mdの記述とあわせて [docs/THIRD_PARTY_LICENSES.md](docs/THIRD_PARTY_LICENSES.md) も更新してください。
+- 本リポジトリの公開ライセンスは [LICENSE](LICENSE) を正本とし、公開前に最新状態を確認してください。
+
+### 外部データソース利用規約
+Yahoo Finance、Stooq、JPX など本アプリケーションが利用する外部データ提供元の利用規約は、OSS ライセンスとは別管理です。
+公開リポジトリで配布する場合は、以下の各データ提供元の利用規約を確認してください。
+
+#### Yahoo Finance API
+- **用途**: 日本株（東証）の現在値、日足・週足ローソク足データ取得
+- **条件**: 利用規約で商用利用や再配布の条件をご確認ください
+- **クレジット表示**: 不要（API利用規約に従う）
+
+#### Stooq
+- **用途**: Yahoo Finance のレート制限またはエラー時のフォールバックデータソース
+- **条件**: Stooq の利用規約に従い、過度なリクエストを避けてください
+- **クレジット表示**: "Stooq"への参照またはリンクを記載することが推奨されています
+
+#### JPX（日本取引所グループ）
+- **用途**: 東証プライム、スタンダード、グロース銘柄一覧、業種データの取得
+- **条件**: JPX で公開されている統計データの利用規約をご確認ください
+- **クレジット表示**: 必要に応じて JPX データソースであることを明記してください
+
+### 著作権・免責事項
+
+#### 著作権表示
+- 本プロジェクトおよびソースコードのオリジナル著作権は Tokyo Market Technical 開発者および貢献者に帰属します。
+- 本プロジェクトのライセンスは [LICENSE](LICENSE)（MIT License）を参照してください。
+
+#### 免責事項
+- 本アプリケーションは個人利用を想定した教育ツールです。
+- 金融投資に関する助言ではなく、ユーザーは自己の責任において本アプリケーションの利用判断を行ってください。
+- 本アプリケーションは提供される市場情報の正確性、完全性、最新性を保証しません。
+- Yahoo Finance、Stooq、JPX から取得するデータの遅延、誤差、欠測が存在する可能性があります。
+- 本アプリケーション、取得データ、技術的支援に関する損害について、開発者および貢献者は一切の責任を負いません。
 
 ---
 

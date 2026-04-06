@@ -973,9 +973,194 @@ sequenceDiagram
 
 ---
 
-## 7. テスト設計
+## 7. 永続化設計
 
-### 7.1 単体テスト対象
+### 7.1 データベース概要
+本アプリケーションはローカルファイルシステム上の SQLite データベースを使用して、価格履歴と分析ラインメタデータを永続化する。
+
+```mermaid
+flowchart LR
+    App[Tokyo Market Technical] --> PriceDB[(data/market_history.db)]
+    App --> LineDB[(data/analysis_lines.db)]
+    PriceDB --> PriceHistory["price_history テーブル<br/>- 日本株の価格スナップショット履歴"]
+    LineDB --> AnalysisLines["analysis_lines テーブル<br/>- チャート分析ラインのメタデータ"]
+```
+
+### 7.2 price_history テーブル設計
+
+#### 7.2.1 テーブル定義
+```sql
+CREATE TABLE IF NOT EXISTS price_history (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    stock_price REAL NOT NULL,
+    recorded_at TEXT NOT NULL
+);
+```
+
+#### 7.2.2 カラム仕様
+| カラム | 型 | NULL | 説明 |
+| --- | --- | --- | --- |
+| id | INTEGER | 不可 | 自動採番される履歴 ID |
+| symbol | TEXT | 不可 | 正規化済みシンボル（例: 7203.T） |
+| stock_price | REAL | 不可 | 保存時点での日本株株価 |
+| recorded_at | TEXT | 不可 | ISO 8601 形式の保存時刻 |
+
+#### 7.2.3 目的
+- FR-05 で MarketSnapshotService.GetSnapshotAsync() 実行時にスナップショットを即座に保存
+- FR-06 で PriceHistoryFeatureService.RecordAndLoadAsync() 呼び出し時に直近 20 件を復元
+- レート制限時にキャッシュから価格を参照（FR-02）
+
+#### 7.2.4 書込パターン
+- **単一行挿入**: `INSERT INTO price_history(symbol, stock_price, recorded_at) VALUES(?, ?, ?);`
+- **読込**: `SELECT id, symbol, stock_price, recorded_at FROM price_history WHERE symbol = ? ORDER BY recorded_at DESC LIMIT ?;`
+
+#### 7.2.5 スキーマ移行
+旧実装で exchange_rate カラムが存在する場合、以下の移行ロジックを実行：
+```sql
+BEGIN TRANSACTION;
+CREATE TABLE price_history_new (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    symbol TEXT NOT NULL,
+    stock_price REAL NOT NULL,
+    recorded_at TEXT NOT NULL
+);
+INSERT INTO price_history_new(id, symbol, stock_price, recorded_at)
+SELECT id, symbol, stock_price, recorded_at FROM price_history;
+DROP TABLE price_history;
+ALTER TABLE price_history_new RENAME TO price_history;
+COMMIT;
+```
+
+### 7.3 analysis_lines テーブル設計
+
+#### 7.3.1 テーブル定義
+```sql
+CREATE TABLE IF NOT EXISTS analysis_lines (
+    symbol TEXT NOT NULL,
+    timeframe INTEGER NOT NULL,
+    display_period INTEGER NOT NULL,
+    line_id TEXT NOT NULL,
+    line_type INTEGER NOT NULL,
+    start_x_ratio REAL NOT NULL,
+    start_y_ratio REAL NOT NULL,
+    end_x_ratio REAL NOT NULL,
+    end_y_ratio REAL NOT NULL,
+    sort_order INTEGER NOT NULL,
+    PRIMARY KEY(symbol, timeframe, display_period, line_id)
+);
+```
+
+#### 7.3.2 カラム仕様
+| カラム | 型 | NULL | 説明 |
+| --- | --- | --- | --- |
+| symbol | TEXT | 不可 | 正規化済みシンボル |
+| timeframe | INTEGER | 不可 | 足種別：0=日足、1=週足 |
+| display_period | INTEGER | 不可 | 表示期間：0=1か月、1=3か月、2=6か月、3=1年 |
+| line_id | TEXT | 不可 | 分析ラインの一意識別子（GUID） |
+| line_type | INTEGER | 不可 | 線種別：0=トレンドライン、1=支持線、2=抵抗線 |
+| start_x_ratio | REAL | 不可 | 始点 X 座標比率（0.0 ～ 1.0） |
+| start_y_ratio | REAL | 不可 | 始点 Y 座標比率（0.0 ～ 1.0） |
+| end_x_ratio | REAL | 不可 | 終点 X 座標比率（0.0 ～ 1.0） |
+| end_y_ratio | REAL | 不可 | 終点 Y 座標比率（0.0 ～ 1.0） |
+| sort_order | INTEGER | 不可 | 描画順序（昇順）、複数行时は連番を逐次割り当て |
+
+#### 7.3.3 複合主キー
+```
+PRIMARY KEY (symbol, timeframe, display_period, line_id)
+```
+- 4 つのカラムの組み合わせが一意となる
+- 同一銘柄・足・期間内で複数のラインを保持可能
+
+#### 7.3.4 目的
+- FR-08C で手動描画による分析ラインをセッション間で復元
+- チャート再表示時に銘柄、足種別、表示期間に応じたラインを再配置
+- ドラッグ移動後の座標を永続化
+
+#### 7.3.5 座標正規化
+- X 座標比率: チャート幅に対する比率（0.0 ～ 1.0）
+- Y 座標比率: チャート高さに対する逆転比率（0.0=上端、1.0=下端）
+- 画面幅の変更時に比率から座標を再計算して描画
+- 比率による保存のため、ウィンドウリサイズ後もラインの相対位置を復元
+
+#### 7.3.6 読み書きパターン
+- **挿入**: `INSERT INTO analysis_lines(...) VALUES(...);` （複数行を一括挿入）
+- **読込**: `SELECT line_id, line_type, start_x_ratio, start_y_ratio, end_x_ratio, end_y_ratio FROM analysis_lines WHERE symbol = ? AND timeframe = ? AND display_period = ? ORDER BY sort_order;`
+- **更新**: `UPDATE analysis_lines SET start_x_ratio = ?, start_y_ratio = ?, end_x_ratio = ?, end_y_ratio = ? WHERE symbol = ? AND timeframe = ? AND display_period = ? AND line_id = ?;`
+- **削除**: 行単位の削除と全削除
+
+### 7.4 リポジトリパターン
+
+#### 7.4.1 SqlitePriceHistoryRepository
+```mermaid
+classDiagram
+    class IPriceHistoryRepository {
+        <<interface>>
+        +SaveAsync(snapshot, cancellationToken)
+        +GetRecentAsync(symbol, limit, cancellationToken)
+    }
+    class SqlitePriceHistoryRepository {
+        -_connectionString: string
+        -_logger: IAppLogger
+        +SaveAsync(snapshot, cancellationToken)
+        +GetRecentAsync(symbol, limit, cancellationToken)
+        -EnsureTableAsync(cancellationToken)
+        -MigrateSchemaAsync(connection, cancellationToken)
+    }
+
+    IPriceHistoryRepository <|.. SqlitePriceHistoryRepository
+```
+
+#### 7.4.2 SqliteChartAnalysisLineRepository
+```mermaid
+classDiagram
+    class IChartAnalysisLineRepository {
+        <<interface>>
+        +GetAsync(symbol, timeframe, displayPeriod, cancellationToken)
+        +SaveAsync(symbol, timeframe, displayPeriod, lines, cancellationToken)
+    }
+    class SqliteChartAnalysisLineRepository {
+        -_connectionString: string
+        -_logger: IAppLogger
+        +GetAsync(symbol, timeframe, displayPeriod, cancellationToken)
+        +SaveAsync(symbol, timeframe, displayPeriod, lines, cancellationToken)
+        -EnsureTableAsync(cancellationToken)
+    }
+
+    IChartAnalysisLineRepository <|.. SqliteChartAnalysisLineRepository
+```
+
+### 7.5 永続化ポリシー
+
+#### 7.5.1 トランザクション管理
+- テーブル作成、スキーマ移行は `BEGIN TRANSACTION` で共有する
+- 複数ラインの一括書込は個別トランザクションで実行
+
+#### 7.5.2 タイムスタンプ形式
+- ISO 8601 形式（`"yyyy-MM-ddTHH:mm:ss.fff+00:00"`）で保存
+- `DateTimeOffset.ToString("O", CultureInfo.InvariantCulture)` で正規化
+- 読込時に `DateTimeOffset.Parse()` で復元
+
+#### 7.5.3 エラーハンドリング
+- テーブル作成失敗時はアプリケーションを停止しない
+- スキーマ移行失敗時はログを記録して既定ポリシーへフォールバック
+- 読込クエリが 0 行を返す場合は空コレクションを返す
+
+#### 7.5.4 ファイル配置
+- **レポジトリ DB**: `AppContext.BaseDirectory/data/market_history.db`
+- **分析ラインDB**: `AppContext.BaseDirectory/data/analysis_lines.db`
+- **ログファイル**: `AppContext.BaseDirectory/logs/app-.log`（日次ローテーション）
+
+#### 7.5.5 キャッシュ戦略
+- GetStockPriceAsync 実行時に price_history の直近レコードをメモリキャッシュ
+- レート制限時のフォールバック時にキャッシュ利用
+- 銘柄切替で前銘柄のキャッシュをクリア
+
+---
+
+## 8. テスト設計
+
+### 8.1 単体テスト対象
 | 要求 ID | テスト対象 |
 | --- | --- |
 | FR-01 | MarketSymbolResolver, TokyoListedSymbolResolver |
