@@ -1,0 +1,816 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Tokyo Market Technical 機能別実装教材</title>
+  <style>
+    :root {
+      --bg: #f7fafc;
+      --paper: #ffffff;
+      --ink: #1f2937;
+      --line: #d1d5db;
+      --brand: #0f766e;
+      --brand-soft: #ccfbf1;
+      --code-bg: #0b1220;
+      --code-ink: #e5e7eb;
+      --shadow: 0 8px 24px rgba(15, 23, 42, 0.08);
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      font-family: "Yu Gothic UI", "Hiragino Kaku Gothic ProN", sans-serif;
+      line-height: 1.7;
+      color: var(--ink);
+      background:
+        radial-gradient(circle at 10% 0%, #dcfce7 0%, transparent 35%),
+        radial-gradient(circle at 90% 10%, #dbeafe 0%, transparent 30%),
+        var(--bg);
+    }
+
+    .wrap {
+      max-width: 1120px;
+      margin: 0 auto;
+      padding: 24px;
+    }
+
+    header {
+      padding: 26px;
+      border-radius: 16px;
+      color: #ffffff;
+      background: linear-gradient(135deg, #134e4a, #0f766e);
+      box-shadow: var(--shadow);
+    }
+
+    h1 {
+      margin: 0 0 8px;
+      font-size: clamp(1.5rem, 3vw, 2.2rem);
+    }
+
+    header p {
+      margin: 0;
+      opacity: 0.95;
+    }
+
+    .grid {
+      margin-top: 16px;
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+      gap: 12px;
+    }
+
+    .card {
+      background: var(--paper);
+      border: 1px solid var(--line);
+      border-radius: 12px;
+      padding: 14px;
+      box-shadow: var(--shadow);
+    }
+
+        .toc {
+            margin-top: 14px;
+            background: var(--paper);
+            border: 1px solid var(--line);
+            border-radius: 12px;
+            box-shadow: var(--shadow);
+            padding: 12px;
+        }
+
+        .toc h3 {
+            margin: 0 0 8px;
+            color: #0f766e;
+        }
+
+        .toc a {
+            color: #0f766e;
+            text-decoration: none;
+            font-weight: 600;
+            margin-right: 10px;
+            display: inline-block;
+            margin-bottom: 6px;
+        }
+
+        .toc a:hover {
+            text-decoration: underline;
+        }
+
+    .badge {
+      display: inline-block;
+      font-size: 0.82rem;
+      border-radius: 999px;
+      padding: 2px 10px;
+      border: 1px solid #99f6e4;
+      background: var(--brand-soft);
+      color: #134e4a;
+      margin-bottom: 6px;
+    }
+
+    h2 {
+      margin-top: 38px;
+      margin-bottom: 8px;
+      border-left: 6px solid var(--brand);
+      padding-left: 10px;
+      color: #134e4a;
+      font-size: 1.35rem;
+    }
+
+    h3 {
+      margin-top: 24px;
+      margin-bottom: 8px;
+      color: #0f766e;
+      font-size: 1.1rem;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+      background: var(--paper);
+      border-radius: 12px;
+      overflow: hidden;
+      box-shadow: var(--shadow);
+      margin: 12px 0;
+    }
+
+    th, td {
+      border: 1px solid var(--line);
+      text-align: left;
+      vertical-align: top;
+      padding: 9px;
+    }
+
+    th {
+      background: #ecfeff;
+    }
+
+    .diagram {
+      border: 1px solid var(--line);
+      background: var(--paper);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+      padding: 12px;
+      overflow-x: auto;
+      margin: 10px 0;
+    }
+
+    pre {
+      margin: 10px 0;
+      background: var(--code-bg);
+      color: var(--code-ink);
+      border-radius: 12px;
+      padding: 13px;
+      overflow-x: auto;
+      box-shadow: var(--shadow);
+    }
+
+    code {
+      font-family: Consolas, "Cascadia Code", monospace;
+      font-size: 0.9rem;
+    }
+
+    .note {
+      border-left: 5px solid #0ea5e9;
+      background: #f0f9ff;
+      border-radius: 10px;
+      padding: 10px 12px;
+      margin: 10px 0;
+    }
+  </style>
+  <script type="module">
+    import mermaid from "https://cdn.jsdelivr.net/npm/mermaid@11/dist/mermaid.esm.min.mjs";
+    mermaid.initialize({ startOnLoad: true, theme: "default" });
+  </script>
+</head>
+<body>
+  <div class="wrap">
+    <header>
+      <h1>Tokyo Market Technical 機能別実装教材</h1>
+      <p>仕様書（FR）と設計書に対応づけて、実装済み機能を全て学べる教材です。各機能は図と具体コードをセットで掲載します。</p>
+    </header>
+
+    <div class="grid">
+      <section class="card">
+        <div class="badge">対象</div>
+        <strong>FR-01〜FR-13</strong>
+        <p>仕様書の機能一覧を網羅します。</p>
+      </section>
+      <section class="card">
+        <div class="badge">形式</div>
+        <strong>仕様 → 設計 → 実装</strong>
+        <p>意図と責務を確認しながら実コードを追えます。</p>
+      </section>
+      <section class="card">
+        <div class="badge">読み方</div>
+        <strong>図 + メソッド抜粋</strong>
+        <p>全機能で mermaid と C# の対応ペアを掲載します。</p>
+      </section>
+    </div>
+
+        <section class="toc">
+            <h3>クイック目次</h3>
+            <a href="#fr01">FR-01</a>
+            <a href="#fr02">FR-02</a>
+            <a href="#fr03">FR-03</a>
+            <a href="#fr0506">FR-05/06</a>
+            <a href="#fr07">FR-07</a>
+            <a href="#fr08">FR-08</a>
+            <a href="#fr08a">FR-08A</a>
+            <a href="#fr08b">FR-08B</a>
+            <a href="#fr08c">FR-08C</a>
+            <a href="#fr09">FR-09</a>
+            <a href="#fr10">FR-10</a>
+            <a href="#fr11">FR-11</a>
+            <a href="#fr12">FR-12</a>
+            <a href="#fr13">FR-13</a>
+        </section>
+
+    <h2>1. 機能網羅マップ</h2>
+    <div class="diagram mermaid">
+flowchart LR
+    A[FR-01 入力解決] --> B[FR-02 現在値取得]
+    B --> C[FR-03 分析表示]
+    C --> D[FR-05/06 履歴保存・読込]
+    C --> E[FR-07/08 チャート]
+    E --> F[FR-08A 指標切替]
+    E --> G[FR-08B MACD/RSI]
+    E --> H[FR-08C 分析ライン]
+    C --> I[FR-09 ステータス]
+    C --> J[FR-10 ログ]
+    C --> K[FR-11 価格通知]
+    C --> L[FR-12 セクター比較]
+    A --> M[FR-13 市場区分設定]
+    </div>
+
+    <table>
+      <thead>
+        <tr><th>FR</th><th>機能名</th><th>主実装クラス</th></tr>
+      </thead>
+      <tbody>
+        <tr><td>FR-01</td><td>銘柄入力解決</td><td>MarketSymbolResolver, TokyoListedSymbolResolver</td></tr>
+        <tr><td>FR-02</td><td>現在値取得</td><td>MarketSnapshotService</td></tr>
+        <tr><td>FR-03</td><td>銘柄分析表示</td><td>MainViewModel</td></tr>
+        <tr><td>FR-05/06</td><td>履歴保存・履歴読込</td><td>PriceHistoryFeatureService, SqlitePriceHistoryRepository</td></tr>
+        <tr><td>FR-07</td><td>日本株ローソク足表示</td><td>JapaneseStockChartFeatureService, JapaneseCandleService</td></tr>
+        <tr><td>FR-08</td><td>足種別/表示期間切替</td><td>MainViewModel</td></tr>
+        <tr><td>FR-08A</td><td>チャート指標表示切替</td><td>ChartIndicatorSelectionService</td></tr>
+        <tr><td>FR-08B</td><td>出来高/MACD/RSI</td><td>CandlestickRenderService</td></tr>
+        <tr><td>FR-08C</td><td>分析ライン描画</td><td>MainViewModel, SqliteChartAnalysisLineRepository</td></tr>
+        <tr><td>FR-09</td><td>ステータス表示</td><td>MainViewModel</td></tr>
+        <tr><td>FR-10</td><td>ログ出力</td><td>AppLoggingConfigurator, SerilogAppLogger</td></tr>
+        <tr><td>FR-11</td><td>価格到達通知</td><td>WindowsDesktopNotificationService</td></tr>
+        <tr><td>FR-12</td><td>セクター比較表示</td><td>SectorComparisonFeatureService</td></tr>
+        <tr><td>FR-13</td><td>市場区分表示と設定</td><td>JsonTokyoMarketSegmentSettingsProvider, ConfigurableTokyoMarketSegmentPolicy</td></tr>
+      </tbody>
+    </table>
+
+    <h2 id="fr01">2. FR-01 銘柄入力解決</h2>
+    <div class="diagram mermaid">
+sequenceDiagram
+    participant VM as MainViewModel
+    participant R as MarketSymbolResolver
+    participant T as TokyoListedSymbolResolver
+
+    VM->>R: ResolveAsync(input)
+    R->>R: 4桁/.T/別名を正規化
+    alt 直接解決不可
+      R->>T: ResolveAsync(normalized)
+      T-->>R: 7203.T
+    end
+    R-->>VM: normalizedSymbol
+    </div>
+
+    <pre><code class="language-csharp">public async Task&lt;string&gt; ResolveAsync(string symbol, CancellationToken cancellationToken)
+{
+    var normalized = NormalizeSymbolInput(symbol);
+    if (normalized.EndsWith(".T", StringComparison.OrdinalIgnoreCase))
+    {
+        return normalized;
+    }
+
+    var resolvedTokyoListedSymbol = await _tokyoListedSymbolResolver.ResolveAsync(normalized, cancellationToken);
+    if (!string.IsNullOrWhiteSpace(resolvedTokyoListedSymbol))
+    {
+        _logger?.Info($"TokyoListedSymbolResolved: Input={symbol}, Resolved={resolvedTokyoListedSymbol}");
+        return resolvedTokyoListedSymbol;
+    }
+
+    throw new InvalidOperationException(ApiErrorMessages.TokyoListedOnlyMessage);
+}</code></pre>
+
+    <h2 id="fr02">3. FR-02 現在値取得</h2>
+    <div class="diagram mermaid">
+sequenceDiagram
+    participant VM as MainViewModel
+    participant S as MarketSnapshotService
+    participant Y as Yahoo
+    participant T as Stooq
+
+    VM->>S: GetMarketSnapshotAsync(symbol)
+    S->>Y: GetStockPriceFromYahooFinanceAsync
+    alt Yahoo成功
+      Y-->>S: price
+    else 失敗/制限
+      S->>T: GetStockPriceFromStooqAsync
+      T-->>S: price
+    end
+    S-->>VM: snapshot
+    </div>
+
+    <pre><code class="language-csharp">public async Task&lt;MarketSnapshotModel&gt; GetMarketSnapshotAsync(string symbol, CancellationToken cancellationToken)
+{
+    var normalizedSymbol = await _symbolResolver.ResolveAsync(symbol, cancellationToken);
+    var companyName = await _symbolResolver.ResolveCompanyNameAsync(normalizedSymbol, cancellationToken) ?? string.Empty;
+    var stockPrice = await GetStockPriceAsync(normalizedSymbol, cancellationToken);
+
+    return new MarketSnapshotModel
+    {
+        Symbol = normalizedSymbol,
+        CompanyName = companyName,
+        StockPrice = stockPrice,
+        StockUpdatedAt = DateTimeOffset.Now
+    };
+}</code></pre>
+
+    <h2 id="fr03">4. FR-03 銘柄分析表示</h2>
+    <div class="diagram mermaid">
+sequenceDiagram
+    participant V as MainWindow
+    participant VM as MainViewModel
+    participant Snap as IMarketSnapshotService
+    participant Hist as IPriceHistoryFeatureService
+    participant Chart as IJapaneseStockChartFeatureService
+
+    V->>VM: ApplySymbolCommand
+    VM->>Snap: LoadSnapshotAsync
+    VM->>Hist: LoadPriceHistoryAsync
+    VM->>Chart: LoadJapaneseStockChartAsync
+    VM-->>V: PropertyChanged
+    </div>
+
+    <pre><code class="language-csharp">private async Task LoadAnalysisAsync()
+{
+    try
+    {
+        StartAnalysisLoad();
+        var snapshot = await LoadSnapshotAsync();
+        await RefreshAnalysisWorkspaceAsync(snapshot);
+        CompleteAnalysisLoad(snapshot);
+    }
+    catch (HttpRequestException ex)
+    {
+        HandleAnalysisFailure(ex);
+    }
+    catch (InvalidOperationException ex)
+    {
+        HandleAnalysisFailure(ex);
+    }
+}</code></pre>
+
+    <h2 id="fr0506">5. FR-05 / FR-06 履歴保存・履歴読込</h2>
+    <div class="diagram mermaid">
+flowchart TD
+    A[RecordAndLoadAsync] --> B[SaveAsync]
+    B --> C[EnsureTableAsync]
+    C --> D[(price_history)]
+    A --> E[GetRecentAsync]
+    E --> D
+    </div>
+
+    <pre><code class="language-csharp">public async Task&lt;PriceHistoryViewData&gt; RecordAndLoadAsync(MarketSnapshotModel snapshot, int limit, CancellationToken cancellationToken)
+{
+    await _repository.SaveAsync(snapshot, cancellationToken);
+    var history = await _repository.GetRecentAsync(snapshot.Symbol, limit, cancellationToken);
+    var orderedHistory = history.OrderBy(x =&gt; x.RecordedAt).ToList();
+    var bars = PriceHistoryBarBuilder.Build(orderedHistory);
+
+    _logger.Info($"PriceHistoryFeatureCompleted: Symbol={snapshot.Symbol}, Count={orderedHistory.Count}");
+    return new PriceHistoryViewData(orderedHistory, bars);
+}</code></pre>
+
+    <pre><code class="language-csharp">public async Task SaveAsync(MarketSnapshotModel snapshot, CancellationToken cancellationToken)
+{
+    await EnsureTableAsync(cancellationToken);
+
+    await using var connection = new SqliteConnection(_connectionString);
+    await connection.OpenAsync(cancellationToken);
+
+    await using var command = connection.CreateCommand();
+    command.CommandText = "INSERT INTO price_history(symbol, stock_price, recorded_at) VALUES($symbol, $stockPrice, $recordedAt);";
+    command.Parameters.AddWithValue("$symbol", snapshot.Symbol);
+    command.Parameters.AddWithValue("$stockPrice", snapshot.StockPrice);
+    command.Parameters.AddWithValue("$recordedAt", snapshot.StockUpdatedAt.ToString("O", CultureInfo.InvariantCulture));
+
+    await command.ExecuteNonQueryAsync(cancellationToken);
+}</code></pre>
+
+    <h2 id="fr07">6. FR-07 日本株ローソク足表示</h2>
+    <div class="diagram mermaid">
+sequenceDiagram
+    participant VM as MainViewModel
+    participant F as JapaneseStockChartFeatureService
+    participant C as JapaneseCandleService
+    participant R as CandlestickRenderService
+
+    VM->>F: LoadAsync(symbol, timeframe, period)
+    F->>C: GetJapaneseCandlesAsync
+    C-->>F: candles
+    F->>R: Build(candles)
+    R-->>F: render data
+    F-->>VM: JapaneseStockChartViewData
+    </div>
+
+    <pre><code class="language-csharp">public async Task&lt;JapaneseStockChartViewData&gt; LoadAsync(
+    string symbol,
+    CandleTimeframe timeframe,
+    CandleDisplayPeriod displayPeriod,
+    int fetchLimit,
+    CancellationToken cancellationToken)
+{
+    if (!IsTokyoSymbol(symbol))
+    {
+        return new JapaneseStockChartViewData(false, Array.Empty&lt;CandlestickRenderItem&gt;(), Array.Empty&lt;ChartIndicatorDefinition&gt;(), Array.Empty&lt;ChartIndicatorRenderSeries&gt;(), Array.Empty&lt;ChartAnalysisLine&gt;(), Array.Empty&lt;IndicatorPanelRenderData&gt;(), 0m, 0m, 320d);
+    }
+
+    var candles = await _japaneseCandleService.GetJapaneseCandlesAsync(symbol, timeframe, fetchLimit, cancellationToken);
+    var filtered = FilterCandlesBySelectedPeriod(candles, displayPeriod);
+    var rendered = CandlestickRenderService.Build(candles, filtered.Count == 0 ? (DateTime?)null : filtered[0].Date);
+    return new JapaneseStockChartViewData(true, rendered.Candlesticks, rendered.IndicatorDefinitions, rendered.OverlayIndicatorSeries, _autoChartAnalysisLineService.Generate(filtered), rendered.IndicatorPanels, filtered.Count == 0 ? 0m : filtered.Min(x =&gt; x.Low), filtered.Count == 0 ? 0m : filtered.Max(x =&gt; x.High), rendered.CanvasWidth);
+}</code></pre>
+
+    <h2 id="fr08">7. FR-08 足種別/表示期間切替</h2>
+    <div class="diagram mermaid">
+flowchart LR
+    A[日足/週足] --> B[ChangeCandlesAsync]
+    C[1M/3M/6M/1Y] --> D[ChangeCandlePeriodAsync]
+    B --> E[ReloadJapaneseCandlesAsync]
+    D --> E
+    </div>
+
+    <pre><code class="language-csharp">private async Task ChangeCandlesAsync(CandleTimeframe timeframe)
+{
+    SetSelectedCandleTimeframe(timeframe);
+    await ReloadJapaneseCandlesAsync();
+}
+
+private async Task ChangeCandlePeriodAsync(CandleDisplayPeriod period)
+{
+    SetSelectedCandleDisplayPeriod(period);
+    await ReloadJapaneseCandlesAsync();
+}</code></pre>
+
+    <h2 id="fr08a">8. FR-08A チャート指標表示切替</h2>
+    <div class="diagram mermaid">
+sequenceDiagram
+    participant UI as Toggle
+    participant VM as MainViewModel
+    participant S as ChartIndicatorSelectionService
+
+    UI->>VM: IsSelected changed
+    VM->>S: CreateSelection(...)
+    S-->>VM: VisibleOverlay / VisiblePanels
+    VM-->>UI: 再描画
+    </div>
+
+    <pre><code class="language-csharp">public ChartIndicatorSelectionResult CreateSelection(
+    IReadOnlyList&lt;ChartIndicatorToggleItem&gt; toggleItems,
+    IReadOnlyList&lt;ChartIndicatorRenderSeries&gt; overlaySeries,
+    IReadOnlyList&lt;IndicatorPanelRenderData&gt; indicatorPanels,
+    IReadOnlyList&lt;IndicatorPanelRenderData&gt; currentVisiblePanels)
+{
+    var selectedIndicatorKeys = toggleItems.Where(item =&gt; item.IsSelected).Select(item =&gt; item.IndicatorKey).ToHashSet(StringComparer.Ordinal);
+    var visibleOverlaySeries = overlaySeries.Where(item =&gt; selectedIndicatorKeys.Contains(item.IndicatorKey)).OrderBy(item =&gt; item.DisplayOrder).ToList();
+    var visibleIndicatorPanels = indicatorPanels.Where(item =&gt; selectedIndicatorKeys.Contains(item.PanelKey)).OrderBy(item =&gt; item.DisplayOrder).ToList();
+    return new ChartIndicatorSelectionResult(visibleOverlaySeries, visibleIndicatorPanels);
+}</code></pre>
+
+        <h2 id="fr08b">9. FR-08B 出来高/MACD/RSI</h2>
+    <div class="diagram mermaid">
+flowchart TD
+        A[JapaneseCandleEntry 配列] --> B[BuildVolumePanel]
+        A --> C[BuildMacdPanel]
+        A --> D[BuildRsiPanel]
+        C --> E[MACD = EMA12 - EMA26]
+        C --> F[Signal = EMA9 of MACD]
+        D --> G[RSI 14期間]
+        B --> H[出来高パネル]
+        E --> I[MACDパネル]
+        G --> J[RSIパネル]
+    </div>
+
+        <div class="note">
+            FR-08B は「入力データ（ローソク足配列）」から 3 種類の下段指標パネルを組み立てる処理です。
+            上図は計算式と表示先の対応を先に把握できるように簡略化しています。
+        </div>
+
+    <pre><code class="language-csharp">private static readonly IReadOnlyList&lt;ChartIndicatorDefinition&gt; SupportedIndicatorDefinitions =
+[
+    new ChartIndicatorDefinition("ma5", "MA5", ChartIndicatorPlacement.OverlayPriceChart, "#F59E0B", true, 10),
+    new ChartIndicatorDefinition("ma25", "MA25", ChartIndicatorPlacement.OverlayPriceChart, "#10B981", true, 20),
+    new ChartIndicatorDefinition("ma75", "MA75", ChartIndicatorPlacement.OverlayPriceChart, "#0EA5E9", true, 30),
+    new ChartIndicatorDefinition("volume", "出来高", ChartIndicatorPlacement.SecondaryPanel, "#64748B", true, 40),
+    new ChartIndicatorDefinition("macd", "MACD", ChartIndicatorPlacement.SecondaryPanel, "#B91C1C", true, 50),
+    new ChartIndicatorDefinition("rsi", "RSI", ChartIndicatorPlacement.SecondaryPanel, "#7C3AED", true, 60)
+];</code></pre>
+
+    <pre><code class="language-csharp">private static IndicatorPanelRenderData? BuildMacdPanel(IReadOnlyList&lt;JapaneseCandleEntry&gt; candles, int visibleStartIndex)
+{
+    if (candles.Count &lt; 26)
+    {
+        return null;
+    }
+
+    var closes = candles.Select(candle =&gt; candle.Close).ToArray();
+    var ema12 = CalculateExponentialMovingAverage(closes, 12);
+    var ema26 = CalculateExponentialMovingAverage(closes, 26);
+    var macdValues = new decimal?[closes.Length];
+    for (var index = 0; index &lt; closes.Length; index++)
+    {
+        if (ema12[index].HasValue &amp;&amp; ema26[index].HasValue)
+        {
+            macdValues[index] = ema12[index]!.Value - ema26[index]!.Value;
+        }
+    }
+    var signalValues = CalculateExponentialMovingAverage(macdValues, 9);
+    return signalValues.Length == 0 ? null : new IndicatorPanelRenderData("macd", "MACD", 50, "N2", null, new List&lt;ChartIndicatorRenderSeries&gt;(), Array.Empty&lt;ChartIndicatorBarItem&gt;(), Array.Empty&lt;IndicatorReferenceLine&gt;(), 0m, 0m, new List&lt;IndicatorPanelHoverItem&gt;());
+}</code></pre>
+
+    <h2 id="fr08c">10. FR-08C 分析ライン描画</h2>
+    <div class="diagram mermaid">
+sequenceDiagram
+    participant U as User
+    participant VM as MainViewModel
+    participant L as IChartAnalysisLineService
+    participant R as IChartAnalysisLineRepository
+
+    U->>VM: 手動描画開始
+    U->>VM: 1回目クリック
+    U->>VM: 2回目クリック
+    VM->>L: CreateLine
+    VM->>R: SaveAsync
+    U->>VM: ドラッグ
+    VM->>L: MoveLine
+    VM->>R: SaveAsync
+    </div>
+
+    <pre><code class="language-csharp">public void RegisterJapaneseChartClick(double chartX, double chartY)
+{
+    if (!IsAnalysisLineDrawingEnabled || JapaneseCandlestickCanvasWidth &lt;= 0d)
+    {
+        return;
+    }
+
+    var normalizedXRatio = NormalizeCoordinate(chartX, JapaneseCandlestickCanvasWidth);
+    var normalizedYRatio = NormalizeCoordinate(chartY, AnalysisLineCanvasHeight);
+
+    if (!_hasPendingAnalysisLinePoint)
+    {
+        _pendingAnalysisLinePointXRatio = normalizedXRatio;
+        _pendingAnalysisLinePointYRatio = normalizedYRatio;
+        _hasPendingAnalysisLinePoint = true;
+        return;
+    }
+
+    var line = _chartAnalysisLineService.CreateLine(SelectedJapaneseAnalysisLineType, _pendingAnalysisLinePointXRatio, _pendingAnalysisLinePointYRatio, normalizedXRatio, normalizedYRatio);
+    if (line is not null)
+    {
+        _japaneseAnalysisLineDefinitions.Add(line);
+        PersistJapaneseAnalysisLinesInBackground(GetSymbolForCandles(), SelectedCandleTimeframe, SelectedCandleDisplayPeriod, _japaneseAnalysisLineDefinitions.ToArray());
+    }
+}</code></pre>
+
+    <pre><code class="language-csharp">public async Task SaveAsync(string symbol, CandleTimeframe timeframe, CandleDisplayPeriod displayPeriod, IReadOnlyList&lt;ChartAnalysisLine&gt; lines, CancellationToken cancellationToken)
+{
+    await EnsureTableAsync(cancellationToken);
+    await using var connection = new SqliteConnection(_connectionString);
+    await connection.OpenAsync(cancellationToken);
+    await using var transaction = (SqliteTransaction)await connection.BeginTransactionAsync(cancellationToken);
+
+    await using var deleteCommand = connection.CreateCommand();
+    deleteCommand.Transaction = transaction;
+    deleteCommand.CommandText = "DELETE FROM analysis_lines WHERE symbol = $symbol AND timeframe = $timeframe AND display_period = $displayPeriod;";
+    await deleteCommand.ExecuteNonQueryAsync(cancellationToken);
+
+    await transaction.CommitAsync(cancellationToken);
+}</code></pre>
+
+    <h2 id="fr09">11. FR-09 ステータス表示</h2>
+    <div class="diagram mermaid">
+stateDiagram-v2
+    [*] --> 準備完了
+    準備完了 --> 分析データ取得中
+    分析データ取得中 --> 表示完了
+    分析データ取得中 --> 表示失敗
+    </div>
+
+    <pre><code class="language-csharp">private void StartAnalysisLoad()
+{
+    _logger.Info($"分析データ読込を開始します。Symbol={Symbol}");
+    ResetSidebarAnalysisState();
+    StatusMessage = "分析データ取得中...";
+}
+
+private void CompleteAnalysisLoad(MarketSnapshotModel snapshot)
+{
+    StatusMessage = $"表示完了: {snapshot.Symbol} (履歴 {PriceHistoryItems.Count} 件)";
+}
+
+private void HandleAnalysisFailure(Exception exception)
+{
+    StatusMessage = $"表示失敗: {CreateFailureMessage(exception)}";
+    _logger.LogError(exception, $"分析データ読込失敗。Symbol={Symbol}");
+}</code></pre>
+
+    <h2 id="fr10">12. FR-10 ログ出力</h2>
+    <div class="diagram mermaid">
+sequenceDiagram
+    participant App as App.xaml.cs
+    participant Cfg as AppLoggingConfigurator
+    participant L as IAppLogger
+
+    App->>Cfg: Configure()
+    Feature->>L: Info()
+    Feature->>L: LogError()
+    L-->>File: logs/app-.log
+    </div>
+
+    <pre><code class="language-csharp">public static void Configure()
+{
+    Log.Logger = new LoggerConfiguration()
+        .MinimumLevel.Information()
+        .WriteTo.File(
+            "logs/app-.log",
+            rollingInterval: RollingInterval.Day,
+            formatProvider: CultureInfo.InvariantCulture,
+            encoding: Encoding.UTF8)
+        .CreateLogger();
+}</code></pre>
+
+    <pre><code class="language-csharp">public void LogError(Exception exception, string message)
+{
+    ArgumentNullException.ThrowIfNull(exception);
+    Log.Error(exception, string.IsNullOrWhiteSpace(message) ? "アプリケーションエラーが発生しました。" : message);
+}</code></pre>
+
+    <h2 id="fr11">13. FR-11 価格到達通知</h2>
+    <div class="diagram mermaid">
+sequenceDiagram
+    participant VM as MainViewModel
+    participant N as IDesktopNotificationService
+
+    VM->>VM: EvaluatePriceAlert(snapshot)
+    alt 閾値跨ぎ
+      VM->>N: ShowNotification(title, message)
+    end
+    </div>
+
+    <pre><code class="language-csharp">private void EvaluatePriceAlert(MarketSnapshotModel snapshot)
+{
+    if (!IsPriceAlertEnabled
+        || !decimal.TryParse(AlertThresholdText, NumberStyles.Float, CultureInfo.CurrentCulture, out var threshold)
+        || threshold &lt;= 0m)
+    {
+        _hasPriceAlertBaseline = false;
+        return;
+    }
+
+    var isAtOrAboveThreshold = snapshot.StockPrice &gt;= threshold;
+    if (_hasPriceAlertBaseline &amp;&amp; isAtOrAboveThreshold != _wasAlertAtOrAboveThreshold)
+    {
+        _desktopNotificationService.ShowNotification($"株価通知: {snapshot.Symbol}", "通知価格を跨ぎました。");
+    }
+}
+
+public void ShowNotification(string title, string message)
+{
+    _notifyIcon.BalloonTipTitle = title;
+    _notifyIcon.BalloonTipText = message;
+    _notifyIcon.BalloonTipIcon = ToolTipIcon.Info;
+    _notifyIcon.ShowBalloonTip(5000);
+}</code></pre>
+
+    <h2 id="fr12">14. FR-12 セクター比較表示</h2>
+    <div class="diagram mermaid">
+sequenceDiagram
+    participant VM as MainViewModel
+    participant S as SectorComparisonFeatureService
+    participant R as MarketSymbolResolver
+    participant M as IMarketSnapshotService
+
+    VM->>S: LoadAsync(symbol)
+    S->>R: GetSectorPeersAsync
+    loop peer
+      S->>M: GetMarketSnapshotAsync(peer)
+      M-->>S: snapshot
+    end
+    S-->>VM: SectorComparisonViewData
+    </div>
+
+    <pre><code class="language-csharp">public async Task&lt;SectorComparisonViewData&gt; LoadAsync(string symbol, CancellationToken cancellationToken)
+{
+    var normalizedSymbol = await _marketSymbolResolver.ResolveAsync(symbol, cancellationToken);
+    var sectorName = await _marketSymbolResolver.ResolveSectorNameAsync(normalizedSymbol, cancellationToken) ?? "-";
+    var marketSegment = await _marketSymbolResolver.ResolveMarketSegmentAsync(normalizedSymbol, cancellationToken);
+    var peers = await _marketSymbolResolver.GetSectorPeersAsync(normalizedSymbol, 3, cancellationToken);
+    var items = new List&lt;SectorComparisonPeerItem&gt;();
+
+    foreach (var peer in peers)
+    {
+        var snapshot = await _marketSnapshotService.GetMarketSnapshotAsync(peer.Symbol, cancellationToken);
+        items.Add(new SectorComparisonPeerItem
+        {
+            Symbol = peer.Symbol,
+            CompanyName = snapshot.CompanyName,
+            StockPriceDisplay = snapshot.StockPrice.ToString("N2", CultureInfo.CurrentCulture),
+            MarketSegmentDisplay = TokyoMarketSegmentParser.ToDisplayName(peer.MarketSegment)
+        });
+    }
+
+    return new SectorComparisonViewData(sectorName, TokyoMarketSegmentParser.ToDisplayName(marketSegment), items);
+}</code></pre>
+
+    <h2 id="fr13">15. FR-13 市場区分表示と設定</h2>
+    <div class="diagram mermaid">
+flowchart TD
+    A[market-settings.json] --> B[LoadSupportedSegments]
+    B --> C{成功?}
+    C -- Yes --> D[ConfigurableTokyoMarketSegmentPolicy]
+    C -- No --> E[TokyoMainMarketSegmentPolicy]
+    D --> F[Resolverへ注入]
+    E --> F
+    </div>
+
+    <pre><code class="language-csharp">private static ITokyoMarketSegmentPolicy CreateMarketSegmentPolicy(IAppLogger logger)
+{
+    var settingsPath = Path.Combine(AppContext.BaseDirectory, "market-settings.json");
+
+    try
+    {
+        var settingsProvider = new JsonTokyoMarketSegmentSettingsProvider(settingsPath);
+        var supportedSegments = settingsProvider.LoadSupportedSegments();
+        logger.Info($"市場区分設定を読み込みました。Segments={string.Join(",", supportedSegments)}");
+        return new ConfigurableTokyoMarketSegmentPolicy(supportedSegments);
+    }
+    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException or InvalidDataException or System.Text.Json.JsonException)
+    {
+        logger.LogError(ex, $"市場区分設定の読込に失敗したため既定設定を使用します。Path={settingsPath}");
+        return new TokyoMainMarketSegmentPolicy();
+    }
+}</code></pre>
+
+    <pre><code class="language-csharp">public IReadOnlyCollection&lt;TokyoMarketSegment&gt; LoadSupportedSegments()
+{
+    if (!File.Exists(_settingsFilePath))
+    {
+        throw new FileNotFoundException("市場区分設定ファイルが見つかりません。", _settingsFilePath);
+    }
+
+    using var stream = File.OpenRead(_settingsFilePath);
+    using var document = JsonDocument.Parse(stream);
+
+    if (!document.RootElement.TryGetProperty("supportedSegments", out var supportedSegmentsElement)
+        || supportedSegmentsElement.ValueKind != JsonValueKind.Array)
+    {
+        throw new InvalidDataException("supportedSegments 配列が定義されていません。");
+    }
+
+    return supportedSegmentsElement.EnumerateArray()
+        .Select(x =&gt; TokyoMarketSegmentParser.ParseValue(x.GetString()))
+        .ToArray();
+}</code></pre>
+
+    <h2>16. FR-04（廃止）</h2>
+    <div class="diagram mermaid">
+flowchart LR
+    A[旧: 自動更新] --> B[仕様で廃止]
+    B --> C[現行: 手動更新のみ]
+    </div>
+
+    <pre><code class="language-csharp">// 現行は手動実行コマンドのみ
+ApplySymbolCommand = new AsyncRelayCommand(LoadAnalysisAsync);
+
+private void StartAnalysisLoad()
+{
+    StatusMessage = "分析データ取得中...";
+}</code></pre>
+
+    <h2>17. 演習（全機能版）</h2>
+    <ol>
+      <li>FR-01 入力正規化をテストで再現する（7203 / トヨタ / 無効値）</li>
+      <li>FR-02 で Yahoo 失敗時の Stooq フォールバックをログで確認する</li>
+      <li>FR-03 実行時にステータスが「取得中 → 完了/失敗」へ遷移するか確認する</li>
+      <li>FR-05/06 で SQLite の履歴件数増加と並び順を確認する</li>
+      <li>FR-07/08/08A/08B で表示条件・指標トグル・MACD/RSI描画を確認する</li>
+      <li>FR-08C で分析ラインの追加・ドラッグ・再読込復元を確認する</li>
+      <li>FR-11, FR-12, FR-13 で通知・同業比較・市場区分設定反映を確認する</li>
+    </ol>
+
+    <div class="note">
+      この教材は仕様書の機能一覧を基準に、設計書の責務分割と実装クラスへ対応づけています。
+      新機能を追加する場合は、同じ形式で FR を増やし、図と実コードをペアで追記してください。
+    </div>
+  </div>
+</body>
+</html>

@@ -12,6 +12,7 @@
 ## 📚 ドキュメント構成
 - [docs/SPECIFICATION.md](docs/SPECIFICATION.md): 仕様書。要件、画面仕様、データ仕様、異常系、設計生成規約、実装生成規約を定義します。
 - [docs/DESIGN.md](docs/DESIGN.md): 設計書。仕様書を受けて、責務分割、コンポーネント構成、フェーズ別の設計内容を定義します。
+- [docs/ENGINEERING_STUDY_GUIDE.html](docs/ENGINEERING_STUDY_GUIDE.html): 初心者〜中級者向け学習ガイド。技術スタック、設計、実装方法を図解中心で学べます。
 - [docs/COPILOT_WATERFALL_WORKFLOW.md](docs/COPILOT_WATERFALL_WORKFLOW.md): Copilot による仕様→設計→実装の生成手順です。
 - [templates/DESIGN_FROM_SPEC_TEMPLATE.md](templates/DESIGN_FROM_SPEC_TEMPLATE.md): 仕様書から設計書を生成するための入力テンプレートです。
 - [templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md](templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md): 設計書から実装を生成するための入力テンプレートです。
