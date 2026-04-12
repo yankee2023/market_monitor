@@ -85,6 +85,96 @@ flowchart LR
 - `Composition` は DI と起動設定だけを担当し、業務ロジックを持たない。
 - 横断関心事（ログ、HTTP、キャッシュ、通知、共通エラー文言）は `Shared` へ集約し、各 Feature に重複実装しない。
 
+### 2.7 設計背景
+
+本プロジェクトでは、東証銘柄入力、現在値取得、ローソク足表示、分析ライン、通知、履歴保存を 1 画面で連動させる必要がある。そのため、単純な code-behind 中心の構成ではなく、責務を明確に分離できる構成を採用する。
+
+設計上の第一目的は、画面変更、外部 API 変更、永続化変更、分析ロジック変更が相互に波及しにくい構造を維持することである。
+
+```mermaid
+flowchart LR
+    View[MainWindow.xaml] --> Dashboard[MainViewModel]
+    Dashboard --> Snapshot[MarketSnapshot Feature]
+    Dashboard --> Chart[JapaneseStockChart Feature]
+    Dashboard --> History[PriceHistory Feature]
+    Dashboard --> Sector[SectorComparison Feature]
+    Snapshot --> Shared[Shared]
+    Chart --> Shared
+    History --> Shared
+    Sector --> Shared
+    Composition[Composition] --> View
+    Composition --> Dashboard
+```
+
+```csharp
+services.AddSingleton<IMarketSnapshotService, MarketSnapshotService>();
+services.AddSingleton<IPriceHistoryFeatureService, PriceHistoryFeatureService>();
+services.AddSingleton<IJapaneseStockChartFeatureService, JapaneseStockChartFeatureService>();
+services.AddSingleton<ISectorComparisonFeatureService, SectorComparisonFeatureService>();
+services.AddTransient<MainViewModel>();
+services.AddTransient<MainWindow>(serviceProvider =>
+    new MainWindow(serviceProvider.GetRequiredService<IMainWindowViewModel>()));
+```
+
+上図とコードが示す通り、View は表示、MainViewModel は画面統合、各 Feature は機能責務、Shared は横断関心事、Composition は配線に限定する。これにより、SOLID の単一責務原則と依存性逆転原則を満たしやすくする。
+
+#### 2.7.1 MVVM 採用理由
+- WPF の Binding と Command を自然に活用しやすい。
+- 画面状態を ViewModel へ集約し、XAML を表示定義へ寄せられる。
+- ViewModel 単体テストを行いやすい。
+
+#### 2.7.2 MainViewModel を画面統合入口とする理由
+- 現在値、履歴、チャート、通知、比較表示を 1 画面の操作として一貫制御する必要がある。
+- 初期表示、再読込、足種別切替などの処理順を 1 か所で管理できる。
+- 画面全体の状態整合性を保ちやすい。
+
+#### 2.7.3 Feature 分割と Shared 集約の理由
+- API 通信、SQLite、通知、分析計算は変更理由が異なるため分離する。
+- 複数機能から利用する HTTP、ログ、共通エラー文言は Shared に集約して重複実装を防ぐ。
+- 機能単位でテスト範囲と影響範囲を限定しやすくする。
+
+#### 2.7.4 code-behind 最小化の理由
+- WPF 固有のイベント引数、座標計算、Window 操作だけを View 側へ閉じ込める。
+- 業務ロジックを ViewModel や Service へ寄せ、UI テスト依存を減らす。
+
+#### 2.7.5 DI 採用理由
+- 実装生成と利用箇所を分離し、Fake や Stub への差し替えを容易にする。
+- 起動時構成を Composition に集約し、依存関係の見通しを確保する。
+
+#### 2.7.6 設計のメリット
+| 項目 | 内容 |
+| --- | --- |
+| 保守性 | 変更理由ごとにクラスやフォルダが分かれ、影響範囲を追いやすい |
+| テスト容易性 | ViewModel と Service を個別に差し替えて検証しやすい |
+| 再利用性 | Shared の共通基盤を複数 Feature で使い回せる |
+| 可読性 | View、ViewModel、Feature、Shared の責務が比較的明確 |
+
+#### 2.7.7 設計のデメリット
+| 項目 | 内容 |
+| --- | --- |
+| 学習コスト | DataContext、Binding、DI、Feature 分割の理解が必要 |
+| ファイル数 | 単純なサンプルより型数とフォルダ数が増える |
+| 肥大化リスク | 画面統合を MainViewModel に集約するため、責務管理を怠ると肥大化しやすい |
+| 追跡難度 | 初学者には、処理の入口と実行箇所が複数ファイルへ分散して見える |
+
+### 2.8 Mermaid 記法規約
+
+本書の Mermaid 図は、現在の実装をリバースエンジニアリングした結果に基づいて、関係種別と同期性を区別して表現する。
+
+| 区分 | 記法 | 用途 |
+| --- | --- | --- |
+| 同期呼び出し | `->>` | 通常メソッド、同期 API、状態変更 |
+| 非同期呼び出し | `-)` | `Task` を返す処理、`await` を伴う処理 |
+| 戻り値 | `-->>` | 呼び出し結果の返却 |
+| ライフライン | `activate` / `deactivate` | どの参加者が処理中かを表す |
+| 実装 | `<|..` | interface を class が実装する関係 |
+| 関連 | `-->` | constructor 注入や field 保持による長寿命参照 |
+| 依存 | `..>` | メソッド内利用、factory 解決、生成のみを行う参照 |
+| 集約 | `o--` | 部品を参照するが寿命を完全所有しない関係 |
+| コンポジション | `*--` | 親が子要素の寿命を所有する関係 |
+
+図の矢印は簡略化のために流用せず、実装上の所有関係、注入関係、`async`/`await` の有無に合わせて選択する。sequenceDiagram ではメソッド呼び出し範囲が分かるように `activate` / `deactivate` を記述し、入れ子呼び出しでは内側の参加者にも activation を付けてネスト構造を表現する。
+
 ---
 
 ## 3. システム構成
@@ -167,14 +257,23 @@ classDiagram
     class MarketSymbolResolver {
         +ResolveAsync(symbol, cancellationToken)
     }
+    class ITokyoListedSymbolResolver {
+        <<interface>>
+    }
     class TokyoListedSymbolResolver {
         +ResolveAsync(symbol, cancellationToken)
     }
+    class ITokyoListedCompanyRecordReader {
+        <<interface>>
+    }
+    class ITokyoMarketSegmentPolicy {
+        <<interface>>
+    }
 
-    ITokyoListedSymbolResolver ().. MarketSymbolResolver
-    ITokyoListedSymbolResolver ()-- TokyoListedSymbolResolver
-    ITokyoListedCompanyRecordReader ().. TokyoListedSymbolResolver
-    ITokyoMarketSegmentPolicy ().. TokyoListedSymbolResolver
+    MarketSymbolResolver --> ITokyoListedSymbolResolver
+    ITokyoListedSymbolResolver <|.. TokyoListedSymbolResolver
+    TokyoListedSymbolResolver --> ITokyoListedCompanyRecordReader
+    TokyoListedSymbolResolver --> ITokyoMarketSegmentPolicy
 ```
 
 #### 4.1.6 シーケンス図
@@ -188,16 +287,24 @@ sequenceDiagram
     participant Policy as ITokyoMarketSegmentPolicy
 
     VM-)Resolver: ResolveAsync(input)
+    activate Resolver
     Resolver->>Resolver: 4桁コード・.T・別名を先に判定
     alt JPX一覧が必要
         Resolver-)Tokyo: ResolveAsync(input)
+        activate Tokyo
         Tokyo-)Reader: ReadAsync(stream)
+        activate Reader
         Reader-->>Tokyo: 上場銘柄一覧
+        deactivate Reader
         Tokyo->>Policy: IsSupported(segment)
+        activate Policy
         Policy-->>Tokyo: true / false
+        deactivate Policy
         Tokyo-->>Resolver: normalizedSymbol
+        deactivate Tokyo
     end
     Resolver-->>VM: normalizedSymbol
+    deactivate Resolver
 ```
 
 ### 4.2 FR-02 現在値取得
@@ -231,8 +338,14 @@ sequenceDiagram
 本図は、現在値取得機能を構成する主要クラス間の関連を表す。
 ```mermaid
 classDiagram
+    class IMarketSnapshotService {
+        <<interface>>
+    }
     class MarketSnapshotService {
-        +GetSnapshotAsync(symbol, cancellationToken)
+        +GetMarketSnapshotAsync(symbol, cancellationToken)
+    }
+    class IRateLimitedHttpService {
+        <<interface>>
     }
     class MarketDataCache
     class MarketSymbolResolver
@@ -243,10 +356,10 @@ classDiagram
         +StockUpdatedAt
     }
 
-    IMarketSnapshotService ()-- MarketSnapshotService
-    IRateLimitedHttpService ().. MarketSnapshotService
-    MarketSnapshotService ..> MarketDataCache
-    MarketSnapshotService ..> MarketSymbolResolver
+    IMarketSnapshotService <|.. MarketSnapshotService
+    MarketSnapshotService --> IRateLimitedHttpService
+    MarketSnapshotService --> MarketDataCache
+    MarketSnapshotService --> MarketSymbolResolver
     MarketSnapshotService ..> MarketSnapshot
 ```
 
@@ -260,29 +373,47 @@ sequenceDiagram
     participant Http as IRateLimitedHttpService
     participant Cache as MarketDataCache
 
-    VM-)Service: GetSnapshotAsync(symbol)
+    VM-)Service: GetMarketSnapshotAsync(symbol)
+    activate Service
     Service-)Resolver: ResolveAsync(symbol)
+    activate Resolver
     Resolver-->>Service: normalizedSymbol
+    deactivate Resolver
     Service-)Http: Yahoo Finance 取得
+    activate Http
     alt Yahoo成功
         Http-->>Service: quote JSON
+        deactivate Http
         Service->>Cache: 現在値を保存
+        activate Cache
+        Cache-->>Service: 保存完了
+        deactivate Cache
         Service-->>VM: MarketSnapshot
     else レート制限
+        deactivate Http
         Service->>Cache: キャッシュ照会
+        activate Cache
         alt キャッシュあり
             Cache-->>Service: cached price
+            deactivate Cache
             Service-->>VM: MarketSnapshot
         else キャッシュなし
+            deactivate Cache
             Service-)Http: Stooq 取得
+            activate Http
             Http-->>Service: CSV
+            deactivate Http
             Service-->>VM: MarketSnapshot
         end
     else Yahoo失敗
+        deactivate Http
         Service-)Http: Stooq 取得
+        activate Http
         Http-->>Service: CSV
+        deactivate Http
         Service-->>VM: MarketSnapshot
     end
+    deactivate Service
 ```
 
 ### 4.3 FR-05, FR-06 履歴管理
@@ -312,8 +443,14 @@ sequenceDiagram
 本図は、履歴保存と履歴読込機能を構成する主要クラス間の関連を表す。
 ```mermaid
 classDiagram
+    class IPriceHistoryFeatureService {
+        <<interface>>
+    }
     class PriceHistoryFeatureService {
         +RecordAndLoadAsync(snapshot, limit, cancellationToken)
+    }
+    class IPriceHistoryRepository {
+        <<interface>>
     }
     class SqlitePriceHistoryRepository {
         +SaveAsync(snapshot, cancellationToken)
@@ -329,9 +466,9 @@ classDiagram
         +Bars
     }
 
-    IPriceHistoryFeatureService ()-- PriceHistoryFeatureService
-    IPriceHistoryRepository ().. PriceHistoryFeatureService
-    IPriceHistoryRepository ()-- SqlitePriceHistoryRepository
+    IPriceHistoryFeatureService <|.. PriceHistoryFeatureService
+    PriceHistoryFeatureService --> IPriceHistoryRepository
+    IPriceHistoryRepository <|.. SqlitePriceHistoryRepository
     PriceHistoryFeatureService ..> PriceHistoryBarBuilder
     PriceHistoryFeatureService ..> PriceHistoryViewData
     PriceHistoryViewData *-- "0..*" PriceHistoryEntry
@@ -348,14 +485,22 @@ sequenceDiagram
     participant Builder as PriceHistoryBarBuilder
 
     VM-)Feature: RecordAndLoadAsync(snapshot, limit)
+    activate Feature
     Feature-)Repo: SaveAsync(snapshot)
+    activate Repo
     Repo->>Repo: テーブル確認・移行
     Repo-->>Feature: 保存完了
+    deactivate Repo
     Feature-)Repo: LoadRecentAsync(symbol, limit)
+    activate Repo
     Repo-->>Feature: PriceHistoryEntry[]
+    deactivate Repo
     Feature->>Builder: Build(entries)
+    activate Builder
     Builder-->>Feature: PriceHistoryBar[]
+    deactivate Builder
     Feature-->>VM: PriceHistoryViewData
+    deactivate Feature
 ```
 
 ### 4.4 FR-07, FR-08 日本株チャート
@@ -398,11 +543,29 @@ sequenceDiagram
 本図は、日本株チャート機能を構成する取得系クラスと描画 DTO、分析ライン補助サービスの関連を表す。
 ```mermaid
 classDiagram
+    class IJapaneseStockChartFeatureService {
+        <<interface>>
+    }
     class JapaneseStockChartFeatureService {
-        +GetChartAsync(symbol, timeframe, period, limit, cancellationToken)
+        +LoadAsync(symbol, timeframe, period, limit, cancellationToken)
+    }
+    class IJapaneseCandleService {
+        <<interface>>
     }
     class JapaneseCandleService {
-        +GetCandlesAsync(symbol, timeframe, limit, cancellationToken)
+        +GetJapaneseCandlesAsync(symbol, timeframe, limit, cancellationToken)
+    }
+    class IAutoChartAnalysisLineService {
+        <<interface>>
+    }
+    class IChartAnalysisLineRepository {
+        <<interface>>
+    }
+    class IChartAnalysisLineService {
+        <<interface>>
+    }
+    class IAppLogger {
+        <<interface>>
     }
     class CandlestickRenderService {
         +BuildViewData(candles, timeframe, period)
@@ -431,13 +594,15 @@ classDiagram
         +IndicatorPanels
     }
 
-    IJapaneseStockChartFeatureService ()-- JapaneseStockChartFeatureService
-    IJapaneseCandleService ().. JapaneseStockChartFeatureService
-    IJapaneseCandleService ()-- JapaneseCandleService
+    IJapaneseStockChartFeatureService <|.. JapaneseStockChartFeatureService
+    JapaneseStockChartFeatureService --> IJapaneseCandleService
+    JapaneseStockChartFeatureService --> IAutoChartAnalysisLineService
+    JapaneseStockChartFeatureService --> IAppLogger
+    IJapaneseCandleService <|.. JapaneseCandleService
     JapaneseStockChartFeatureService ..> CandlestickRenderService
     JapaneseStockChartFeatureService ..> JapaneseStockChartViewData
-    IChartAnalysisLineRepository ()-- SqliteChartAnalysisLineRepository
-    IChartAnalysisLineService ()-- ChartAnalysisLineService
+    IChartAnalysisLineRepository <|.. SqliteChartAnalysisLineRepository
+    IChartAnalysisLineService <|.. ChartAnalysisLineService
     SqliteChartAnalysisLineRepository ..> ChartAnalysisLine
     ChartAnalysisLineService ..> ChartAnalysisLine
     ChartAnalysisLineService ..> ChartAnalysisLineType
@@ -458,19 +623,30 @@ sequenceDiagram
     participant Render as CandlestickRenderService
     participant Http as IRateLimitedHttpService
 
-    VM-)Feature: GetChartAsync(symbol, timeframe, period, limit)
+    VM-)Feature: LoadAsync(symbol, timeframe, period, limit)
+    activate Feature
     Feature-)Candle: GetCandlesAsync(symbol, timeframe, limit)
+    activate Candle
     Candle-)Http: Yahoo Finance 取得
+    activate Http
     alt Yahoo成功
         Http-->>Candle: OHLC JSON
+        deactivate Http
     else Yahoo失敗または制限
+        deactivate Http
         Candle-)Http: Stooq 取得
+        activate Http
         Http-->>Candle: CSV
+        deactivate Http
     end
     Candle-->>Feature: JapaneseCandleEntry[]
+    deactivate Candle
     Feature->>Render: BuildViewData(candles, timeframe, period)
+    activate Render
     Render-->>Feature: JapaneseStockChartViewData
+    deactivate Render
     Feature-->>VM: JapaneseStockChartViewData
+    deactivate Feature
 ```
 
 #### 4.4.6 分析ライン操作シーケンス
@@ -485,26 +661,50 @@ sequenceDiagram
     participant ChartFeature as IJapaneseStockChartFeatureService
 
     View->>Dialog: 手動で線を描く
+    activate Dialog
     Dialog-->>View: lineType
+    deactivate Dialog
     View->>VM: StartManualAnalysisLineDrawing(lineType)
+    activate VM
     View->>VM: RegisterJapaneseChartClick(startX, startY)
     VM->>VM: 始点を保持
     View->>VM: RegisterJapaneseChartClick(endX, endY)
     VM->>LineService: CreateLine(startXRatio, startYRatio, endXRatio, endYRatio)
+    activate LineService
     LineService-->>VM: ChartAnalysisLine
+    deactivate LineService
     VM->>LineService: CreateRenderItems(lines, canvasWidth, canvasHeight)
+    activate LineService
     LineService-->>VM: ChartAnalysisLineRenderItem[]
+    deactivate LineService
     VM-->>View: JapaneseAnalysisLines を更新
     VM-)Repo: SaveAsync(symbol, timeframe, period, lines)
+    activate Repo
+    Repo-->>VM: 保存完了
+    deactivate Repo
     View->>VM: BeginJapaneseChartPointerInteraction(x, y)
     View->>VM: UpdateJapaneseChartPointerInteraction(x + dx, y + dy)
     VM->>LineService: MoveLine(line, dxRatio, dyRatio)
+    activate LineService
+    LineService-->>VM: movedLine
+    deactivate LineService
     VM-)Repo: SaveAsync(symbol, timeframe, period, lines)
+    activate Repo
+    Repo-->>VM: 保存完了
+    deactivate Repo
     VM-)ChartFeature: LoadAsync(symbol, timeframe, period, limit)
+    activate ChartFeature
     ChartFeature-->>VM: JapaneseStockChartViewData
+    deactivate ChartFeature
     VM-)Repo: GetAsync(symbol, timeframe, period)
+    activate Repo
     Repo-->>VM: ChartAnalysisLine[]
+    deactivate Repo
     VM->>LineService: CreateRenderItems(lines, newCanvasWidth, canvasHeight)
+    activate LineService
+    LineService-->>VM: ChartAnalysisLineRenderItem[]
+    deactivate LineService
+    deactivate VM
 ```
 
 ### 4.5 FR-03, FR-09 画面統合
@@ -579,13 +779,13 @@ classDiagram
         +CompleteJapaneseChartPointerInteraction(chartX, chartY)
     }
 
-    IMarketSnapshotService ().. MainViewModel
-    IPriceHistoryFeatureService ().. MainViewModel
-    IJapaneseStockChartFeatureService ().. MainViewModel
-    ISectorComparisonFeatureService ().. MainViewModel
-    IChartIndicatorSelectionService ().. MainViewModel
-    IChartAnalysisLineRepository ().. MainViewModel
-    IChartAnalysisLineService ().. MainViewModel
+    MainViewModel --> IMarketSnapshotService
+    MainViewModel --> IPriceHistoryFeatureService
+    MainViewModel --> IJapaneseStockChartFeatureService
+    MainViewModel --> ISectorComparisonFeatureService
+    MainViewModel --> IChartIndicatorSelectionService
+    MainViewModel --> IChartAnalysisLineRepository
+    MainViewModel --> IChartAnalysisLineService
 ```
 
 #### 4.5.5 シーケンス図
@@ -600,20 +800,34 @@ sequenceDiagram
     participant Sector as ISectorComparisonFeatureService
     participant Indicator as IChartIndicatorSelectionService
 
-    View-)VM: LoadAnalysisAsync()
-    VM-)Snapshot: GetSnapshotAsync(Symbol)
+    View->>VM: ApplySymbolCommand.Execute()
+    activate VM
+    VM-)Snapshot: GetMarketSnapshotAsync(Symbol)
+    activate Snapshot
     Snapshot-->>VM: MarketSnapshot
+    deactivate Snapshot
     VM-)History: RecordAndLoadAsync(snapshot, limit)
+    activate History
     History-->>VM: PriceHistoryViewData
-    VM-)Chart: GetChartAsync(symbol, timeframe, period, limit)
+    deactivate History
+    VM-)Chart: LoadAsync(symbol, timeframe, period, limit)
+    activate Chart
     Chart-->>VM: JapaneseStockChartViewData
+    deactivate Chart
     VM->>Indicator: CreateToggleItems(...)
+    activate Indicator
     Indicator-->>VM: ChartIndicatorToggleItem[]
+    deactivate Indicator
     VM->>Indicator: CreateSelection(...)
+    activate Indicator
     Indicator-->>VM: Visible overlays / panels
-    VM-)Sector: GetSectorComparisonAsync(symbol)
+    deactivate Indicator
+    VM-)Sector: LoadAsync(symbol)
+    activate Sector
     Sector-->>VM: SectorComparisonViewData
+    deactivate Sector
     VM-->>View: 表示プロパティ更新
+    deactivate VM
 ```
 
 ### 4.6 FR-11 価格到達通知
@@ -642,8 +856,8 @@ classDiagram
         +Dispose()
     }
 
-    IDesktopNotificationService ().. MainViewModel
-    IDesktopNotificationService ()-- WindowsDesktopNotificationService
+    MainViewModel --> IDesktopNotificationService
+    IDesktopNotificationService <|.. WindowsDesktopNotificationService
 ```
 
 #### 4.6.4 シーケンス図
@@ -654,14 +868,18 @@ sequenceDiagram
     participant Notify as IDesktopNotificationService
 
     VM->>VM: EvaluatePriceAlert(snapshot)
+    activate VM
     alt 通知無効 または 閾値不正
         VM-->>VM: ベースラインを解除
     else 閾値跨ぎ発生
         VM->>Notify: ShowNotification(title, message)
+        activate Notify
         Notify-->>VM: 表示完了
+        deactivate Notify
     else 閾値跨ぎなし
         VM-->>VM: 状態維持
     end
+    deactivate VM
 ```
 
 ### 4.7 FR-12 セクター比較表示
@@ -678,7 +896,7 @@ sequenceDiagram
 | Feature 実装 | Features/SectorComparison/Services/SectorComparisonFeatureService |
 | DTO | Features/SectorComparison/Models/SectorComparisonViewData |
 | DTO | Features/SectorComparison/Models/SectorComparisonPeerItem |
-| 共通抽象 | Shared/MarketData/ITokyoListedSymbolResolver |
+| 共通依存 | Shared/MarketData/MarketSymbolResolver |
 | 参照先 | Features/MarketSnapshot/Services/IMarketSnapshotService |
 
 #### 4.7.3 クラス図
@@ -686,8 +904,9 @@ sequenceDiagram
 ```mermaid
 classDiagram
     class SectorComparisonFeatureService {
-        +GetSectorComparisonAsync(symbol, cancellationToken)
+        +LoadAsync(symbol, cancellationToken)
     }
+    class MarketSymbolResolver
     class SectorComparisonViewData {
         +SectorName
         +Items
@@ -699,9 +918,9 @@ classDiagram
         +StockPriceDisplay
     }
 
-    ISectorComparisonFeatureService ()-- SectorComparisonFeatureService
-    ITokyoListedSymbolResolver ().. SectorComparisonFeatureService
-    IMarketSnapshotService ().. SectorComparisonFeatureService
+    ISectorComparisonFeatureService <|.. SectorComparisonFeatureService
+    SectorComparisonFeatureService --> MarketSymbolResolver
+    SectorComparisonFeatureService --> IMarketSnapshotService
     SectorComparisonFeatureService ..> SectorComparisonViewData
     SectorComparisonViewData *-- "0..*" SectorComparisonPeerItem
 ```
@@ -712,17 +931,27 @@ classDiagram
 sequenceDiagram
     participant VM as MainViewModel
     participant Feature as ISectorComparisonFeatureService
-    participant Resolver as ITokyoListedSymbolResolver
+    participant Resolver as MarketSymbolResolver
     participant Snapshot as IMarketSnapshotService
 
-    VM-)Feature: GetSectorComparisonAsync(symbol)
-    Feature-)Resolver: ResolveSectorPeersAsync(symbol)
+    VM-)Feature: LoadAsync(symbol)
+    activate Feature
+    Feature-)Resolver: ResolveAsync(symbol)
+    activate Resolver
+    Resolver-->>Feature: normalizedSymbol
+    deactivate Resolver
+    Feature-)Resolver: GetSectorPeersAsync(normalizedSymbol, count)
+    activate Resolver
     Resolver-->>Feature: 同業候補一覧
+    deactivate Resolver
     loop 最大3銘柄
-        Feature-)Snapshot: GetSnapshotAsync(peerSymbol)
+        Feature-)Snapshot: GetMarketSnapshotAsync(peerSymbol)
+        activate Snapshot
         Snapshot-->>Feature: MarketSnapshot
+        deactivate Snapshot
     end
     Feature-->>VM: SectorComparisonViewData
+    deactivate Feature
 ```
 
 ### 4.8 FR-13 市場区分表示と設定
@@ -753,10 +982,10 @@ classDiagram
         +CreateMainWindow()
     }
 
-    ITokyoMarketSegmentSettingsProvider ()-- JsonTokyoMarketSegmentSettingsProvider
-    ITokyoMarketSegmentPolicy ()-- ConfigurableTokyoMarketSegmentPolicy
-    ITokyoMarketSegmentSettingsProvider ().. AppBootstrapper
-    ITokyoMarketSegmentPolicy ().. AppBootstrapper
+    ITokyoMarketSegmentSettingsProvider <|.. JsonTokyoMarketSegmentSettingsProvider
+    ITokyoMarketSegmentPolicy <|.. ConfigurableTokyoMarketSegmentPolicy
+    AppBootstrapper ..> ITokyoMarketSegmentSettingsProvider
+    AppBootstrapper ..> ITokyoMarketSegmentPolicy
 ```
 
 #### 4.8.4 シーケンス図
@@ -769,11 +998,20 @@ sequenceDiagram
     participant Resolver as TokyoListedSymbolResolver
 
     App->>Provider: LoadSupportedSegments()
+    activate Provider
     alt 設定読込成功
         Provider-->>App: supportedSegments
+        deactivate Provider
         App->>Policy: ConfigurableTokyoMarketSegmentPolicy(supportedSegments)
+        activate Policy
+        Policy-->>App: policy 生成完了
+        deactivate Policy
     else 設定読込失敗
+        deactivate Provider
         App->>Policy: TokyoMainMarketSegmentPolicy()
+        activate Policy
+        Policy-->>App: policy 生成完了
+        deactivate Policy
     end
     App-->>Resolver: policy を注入
 ```
@@ -806,11 +1044,11 @@ classDiagram
     class MarketSnapshotService
     class JapaneseCandleService
 
-    IAppLogger ()-- SerilogAppLogger
+    IAppLogger <|.. SerilogAppLogger
     AppLoggingConfigurator ..> SerilogAppLogger
-    IAppLogger ().. MainViewModel
-    IAppLogger ().. MarketSnapshotService
-    IAppLogger ().. JapaneseCandleService
+    MainViewModel --> IAppLogger
+    MarketSnapshotService --> IAppLogger
+    JapaneseCandleService --> IAppLogger
 ```
 
 #### 4.9.4 シーケンス図
@@ -823,11 +1061,16 @@ sequenceDiagram
     participant Feature as MainViewModel / FeatureService
 
     App->>Config: Configure()
+    activate Config
     Config-->>App: Serilog初期化
+    deactivate Config
     Feature->>Logger: Info(message)
+    activate Logger
     alt 例外発生
         Feature->>Logger: LogError(exception, message)
     end
+    Logger-->>Feature: 記録完了
+    deactivate Logger
 ```
 
 ---
@@ -883,8 +1126,8 @@ classDiagram
     MainWindow *-- "1" AnalysisPane
     MainWindow *-- "1" SidebarPane
     MainWindow *-- "1" StatusBarArea
-    IMainWindowViewModel ().. MainWindow
-    IMainWindowViewModel ()-- MainViewModel
+    MainWindow --> IMainWindowViewModel
+    IMainWindowViewModel <|.. MainViewModel
 ```
 
 ### 5.4 MainWindow シーケンス図
@@ -896,14 +1139,20 @@ sequenceDiagram
     participant VM as IMainWindowViewModel
 
     User->>Window: ウィンドウを開く
+    activate Window
     Window->>Window: OnSourceInitialized()
     Window->>Window: WindowStartupPlacementService.Apply(...)
     Window->>Window: OnLoaded()
     Window-)VM: InitializeAsync()
+    activate VM
     VM-->>Window: 初期表示状態
+    deactivate VM
     User->>Window: 表示ボタン押下
-    Window-)VM: LoadAnalysisAsync()
+    Window-->>VM: ApplySymbolCommand.Execute() は Binding 経由で実行
+    activate VM
     VM-->>Window: 表示プロパティ更新
+    deactivate VM
+    deactivate Window
 ```
 
 ---
@@ -960,14 +1209,25 @@ sequenceDiagram
     participant Window as MainWindow
 
     App->>LogConfig: Configure()
+    activate LogConfig
+    LogConfig-->>App: ログ設定完了
+    deactivate LogConfig
     App->>Lifecycle: Start(AppBootstrapper.CreateMainWindow)
+    activate Lifecycle
     Lifecycle->>Bootstrapper: CreateMainWindow()
+    activate Bootstrapper
     Bootstrapper->>Bootstrapper: ServiceCollection を構成
     Bootstrapper->>Provider: BuildServiceProvider()
+    activate Provider
     Provider->>Window: Resolve MainWindow
+    activate Window
     Window-->>Lifecycle: MainWindow
+    deactivate Provider
+    deactivate Bootstrapper
     Lifecycle->>Window: Show()
     Window-->>App: 起動完了
+    deactivate Window
+    deactivate Lifecycle
 ```
 
 ---

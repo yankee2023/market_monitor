@@ -2,7 +2,7 @@
 
 このファイルは Tokyo Market Technical 固有のルールを定義します。
 
-再利用可能な C# / WPF 共通ガイダンスは [.github/instructions/common-csharp-wpf.instructions.md](.github/instructions/common-csharp-wpf.instructions.md) に分離しています。
+再利用可能な C# / WPF 共通ガイダンスは ../../.github/instructions/common-csharp-wpf-implementation.instructions.md と ../../.github/instructions/common-csharp-wpf-design.instructions.md に分離しています。
 
 ## 1. スコープ
 - 本アプリケーションは日本株専用とし、東証 `.T` シンボル以外を新規機能で受け付けないこと。
@@ -10,11 +10,11 @@
 - ユーザー入力は `xxxx.T` 形式、または東証プライム・スタンダード・グロースの上場企業名へ必ず解決すること。
 
 ## 2. 正本管理
-- [SPECIFICATION.md](../docs/SPECIFICATION.md)、[DESIGN.md](../docs/DESIGN.md)、実装は同一変更で同時更新すること。
-- 要件判断は [SPECIFICATION.md](../docs/SPECIFICATION.md) を唯一の正本とすること。
-- 設計判断は [DESIGN.md](../docs/DESIGN.md) を唯一の正本とすること。
+- [SPECIFICATION.md](../../docs/SPECIFICATION.md)、[DESIGN.md](../../docs/DESIGN.md)、実装は同一変更で同時更新すること。
+- 要件判断は [SPECIFICATION.md](../../docs/SPECIFICATION.md) を唯一の正本とすること。
+- 設計判断は [DESIGN.md](../../docs/DESIGN.md) を唯一の正本とすること。
 - 振る舞い変更時は、コードのみ先行変更を禁止し、ドキュメントを同時に更新すること。
-- ウォーターフォール運用は [docs/COPILOT_WATERFALL_WORKFLOW.md](../docs/COPILOT_WATERFALL_WORKFLOW.md)、[templates/DESIGN_FROM_SPEC_TEMPLATE.md](../templates/DESIGN_FROM_SPEC_TEMPLATE.md)、[templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md](../templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md) に一致させること。
+- ウォーターフォール運用は [docs/COPILOT_WATERFALL_WORKFLOW.md](../../docs/COPILOT_WATERFALL_WORKFLOW.md)、[templates/DESIGN_FROM_SPEC_TEMPLATE.md](../../templates/DESIGN_FROM_SPEC_TEMPLATE.md)、[templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md](../../templates/IMPLEMENTATION_FROM_DESIGN_TEMPLATE.md) に一致させること。
 
 ## 3. アーキテクチャ
 - `Composition`、`Shared`、`Features` の feature-sliced 構造を維持し、root 直下へ新規レイヤーを追加しないこと。
@@ -28,7 +28,7 @@
 - Stooq は Yahoo Finance 失敗時のフォールバックとしてのみ呼び出すこと。
 - 東証プライム、スタンダード、グロース銘柄名の解決は JPX 上場企業データを使用すること。
 - SQLite の履歴テーブルは `symbol`、`stock_price`、`recorded_at` 以外を追加しないこと（仕様変更時を除く）。
-- 依存関係変更がライセンスへ影響する場合は、[THIRD_PARTY_LICENSES.md](../docs/THIRD_PARTY_LICENSES.md) と README の参照更新を同一変更で行うこと。
+- 依存関係変更がライセンスへ影響する場合は、[THIRD_PARTY_LICENSES.md](../../docs/THIRD_PARTY_LICENSES.md) と README の参照更新を同一変更で行うこと。
 
 ## 5. ログとエラー
 - ログは Serilog を使用し、ファイル出力先を `logs/app-.log` から変更しないこと。
@@ -51,6 +51,7 @@
 - 責務変更時は public XML コメントを同一変更で更新すること。
 - 仕様変更がない限り、既存の命名規約とフォルダ規約を変更しないこと。
 - ソースコードまたは設計を説明する場合は、mermaid 図とソースコード例を必ず同時に示すこと。
+- Mermaid 図は現在の実装に合わせて記法を使い分けること。`sequenceDiagram` は同期 `->>`、非同期 `-)`、戻り値 `-->>`、`activate` / `deactivate` によるライフライン、入れ子呼び出し時のネストした activation を必ず区別すること。`classDiagram` は関連 `-->`、依存 `..>`、集約 `o--`、コンポジション `*--`、実装 `<|..` を厳密に区別すること。
 
 ## 8. ルール具体例（図 + C#）
 

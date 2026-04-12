@@ -2,7 +2,7 @@
 
 このファイルは Tokyo Market Technical 固有のルールを定義します。
 
-再利用可能な C# / WPF 共通ガイダンスは [.github/instructions/common-csharp-wpf.instructions.md](.github/instructions/common-csharp-wpf.instructions.md) に分離しています。
+再利用可能な C# / WPF 共通ガイダンスは instructions/common-csharp-wpf-implementation.instructions.md と instructions/common-csharp-wpf-design.instructions.md に分離しています。
 
 ## 1. スコープ
 - 本アプリケーションは日本株専用とし、東証 `.T` シンボル以外を新規機能で受け付けないこと。
@@ -51,6 +51,7 @@
 - 責務変更時は public XML コメントを同一変更で更新すること。
 - 仕様変更がない限り、既存の命名規約とフォルダ規約を変更しないこと。
 - ソースコードまたは設計を説明する場合は、mermaid 図とソースコード例を必ず同時に示すこと。
+- Mermaid 図は現在の実装に合わせて記法を使い分けること。`sequenceDiagram` は同期 `->>`、非同期 `-)`、戻り値 `-->>`、`activate` / `deactivate` によるライフライン、入れ子呼び出し時のネストした activation を必ず区別すること。`classDiagram` は関連 `-->`、依存 `..>`、集約 `o--`、コンポジション `*--`、実装 `<|..` を厳密に区別すること。
 
 ## 8. ルール具体例（図 + C#）
 
